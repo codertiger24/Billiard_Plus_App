@@ -35,7 +35,7 @@ export default function LoginScreen({ navigation }) {
       <View style={styles.formContainer}>
         <Text style={styles.label}>Tên Đăng nhập</Text>
         <TextInput
-          style={styles.input}
+          style={styles.input}p
           placeholder="Nhập tên đăng nhập"
           value={username}
           onChangeText={setUsername}
