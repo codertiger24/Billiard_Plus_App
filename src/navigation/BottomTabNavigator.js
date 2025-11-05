@@ -3,7 +3,7 @@ import HomeScreen from "../screens/HomeScreen";
 import OrderScreen from "../screens/OrderScreen";
 import PaymentScreen from "../screens/PaymentScreen";
 import { Ionicons } from "@expo/vector-icons";
-
+import OrderDetail from "../screens/OrderDetail";
 const Tab = createBottomTabNavigator();
 
 export default function BottomTabNavigator() {
