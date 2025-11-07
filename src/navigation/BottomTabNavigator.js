@@ -1,7 +1,9 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import HomeScreen from "../screens/HomeScreen";
-import OrderScreen from "../screens/OrderScreen";
+import TableListScreen from "../screens/TableListScreen";
 import PaymentScreen from "../screens/PaymentScreen";
+import PaymentSuccessScreen from "../screens/PaymentScreen";
+
 import { Ionicons } from "@expo/vector-icons";
 import OrderDetail from "../screens/OrderDetail";
 const Tab = createBottomTabNavigator();
@@ -24,7 +26,7 @@ export default function BottomTabNavigator() {
           let iconName;
 
           if (route.name === "Home") iconName = "home";
-          else if (route.name === "Order") iconName = "calendar";
+          else if (route.name === "Table") iconName = "calendar";
           else if (route.name === "Payment") iconName = "card";
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -32,7 +34,7 @@ export default function BottomTabNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: "Trang chủ" }} />
-      <Tab.Screen name="Order" component={OrderScreen} options={{ title: "Đặt bàn" }} />
+      <Tab.Screen name="Table" component={TableListScreen} options={{ title: "Đặt bàn" }} />
       <Tab.Screen name="Payment" component={PaymentScreen} options={{ title: "Thanh toán" }} />
     </Tab.Navigator>
   );
