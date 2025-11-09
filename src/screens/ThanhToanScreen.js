@@ -109,7 +109,9 @@ export default function ThanhToanScreen({ navigation }) {
             })
           }
         >
-          <Text style={styles.primaryText}>Xác nhận thanh toán</Text>
+          <Text style={styles.primaryText}
+          onPress={()=>navigation.navigate('ThanhToanSuccess')}
+          >Xác nhận thanh toán</Text>
         </TouchableOpacity>
 
         <View style={{ height: 24 }} />

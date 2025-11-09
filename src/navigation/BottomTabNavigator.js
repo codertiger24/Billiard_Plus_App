@@ -3,7 +3,7 @@ import HomeScreen from "../screens/HomeScreen";
 import TableListScreen from "../screens/TableListScreen";
 import PaymentScreen from "../screens/PaymentScreen";
 import PaymentSuccessScreen from "../screens/PaymentScreen";
-
+import ThanhToanScreen from "../screens/ThanhToanScreen";
 import { Ionicons } from "@expo/vector-icons";
 import OrderDetail from "../screens/OrderDetail";
 const Tab = createBottomTabNavigator();
@@ -35,7 +35,7 @@ export default function BottomTabNavigator() {
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: "Trang chủ" }} />
       <Tab.Screen name="Table" component={TableListScreen} options={{ title: "Đặt bàn" }} />
-      <Tab.Screen name="Payment" component={PaymentScreen} options={{ title: "Thanh toán" }} />
+      <Tab.Screen name="Payment" component={PaymentSuccessScreen} options={{ title: "Thanh toán" }} />
     </Tab.Navigator>
   );
 }

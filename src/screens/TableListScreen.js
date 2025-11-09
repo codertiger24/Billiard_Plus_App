@@ -5,11 +5,15 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  StatusBar,
+ 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Header from "../components/Header";
+import Menu from "../components/Menu";
+import { StatusBar } from 'expo-status-bar';
 
 export default function TableListScreen({ navigation }) {
+  const [menuVisible, setMenuVisible] = useState(false);
   // Dữ liệu mẫu cho các bàn bi-a (9 bàn)
   const [tables, setTables] = useState([
     { id: 1, status: 'occupied', timeUsed: '3 phút' },
@@ -83,7 +87,21 @@ export default function TableListScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
+      <StatusBar 
+        barStyle="dark-content" 
+        backgroundColor="#fff"  // Match with header background
+      />
+      
+      <Header 
+        onMenuPress={() => setMenuVisible(true)}
+        onNotificationPress={() => navigation.navigate('Notifications')}
+      />
+      
+      <Menu 
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        navigation={navigation}
+      />
 
       {/* Phần thống kê */}
       <View style={styles.statsContainer}>

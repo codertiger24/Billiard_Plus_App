@@ -137,7 +137,8 @@ export default function OrderDetail({ navigation, route }) {
           <Text style={styles.saveButtonText}>Lưu</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.payButton}>
+        <TouchableOpacity style={styles.payButton}
+        onPress={()=>navigation.navigate('ThanhToan')}>
           <Text style={styles.payButtonText}>Thanh toán</Text>
         </TouchableOpacity>
       </View>

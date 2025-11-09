@@ -8,11 +8,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Header from "../components/Header";
+import Menu from "../components/Menu";
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }) {
+  const [menuVisible, setMenuVisible] = useState(false);
   const [tables, setTables] = useState([
     { id: 3, name: "Bàn 3", status: "Khu vực khách", time: "3 giờ 45 phút" },
     { id: 1, name: "Bàn 1", status: "Khu vực khách", time: "3 giờ 3 phút" },
@@ -22,32 +24,21 @@ export default function HomeScreen() {
   ]);
 
   const handleAddTable = () => {
-    Alert.alert(
-      "Thêm bàn mới",
-      "Chức năng thêm bàn đang được phát triển",
-      [{ text: "OK" }]
-    );
+   navigation.navigate("OrderScreen");
   };
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity>
-          <Ionicons name="menu" size={28} color="#333" />
-        </TouchableOpacity>
-        <Image
-          source={require("../../assets/logo.jpg")}
-          style={styles.headerLogo}
-          resizeMode="contain"
-        />
-        <View style={styles.notificationIcon}>
-          <Ionicons name="notifications" size={28} color="#333" />
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>2</Text>
-          </View>
-        </View>
-      </View>
+      <Header
+        onMenuPress={() => setMenuVisible(true)}
+        onNotificationPress={() => navigation.navigate("Notifications")}
+      />
+
+      <Menu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        navigation={navigation}
+      />
 
       {/* Danh sách bàn */}
       <ScrollView style={styles.tableList}>
