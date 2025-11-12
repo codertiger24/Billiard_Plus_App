@@ -9,6 +9,7 @@ import LoginScreen from "../screens/LoginScreen";
 import ThanhToanScreen from "../screens/ThanhToanScreen";
 import PaymentSuccessScreen from "../screens/PaymentSuccessScreen";
 import QLHoaDonScreen from "../screens/QLHoaDonScreen";
+import InvoiceDetailScreen from "../screens/InvoiceDetailScreens";
 
 // Tạo các component tạm thời
 const DummyScreen = ({ route }) => (
@@ -50,6 +51,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Debts" component={DebtsScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
+        <Stack.Screen name="BillDetail" component={InvoiceDetailScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

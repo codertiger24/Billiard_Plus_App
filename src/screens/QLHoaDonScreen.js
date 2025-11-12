@@ -66,6 +66,7 @@ export default function QLHoaDonScreen({ navigation }) {
         data={bills}
         renderItem={renderBillItem}
         keyExtractor={item => item.id}
+        onPress={() => navigation.navigate('BillDetail')}
         contentContainerStyle={styles.billList}
       />
     </SafeAreaView>
