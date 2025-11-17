@@ -1,5 +1,5 @@
 //Dang nhap
-
+import { authService } from "../services/authService";
 import React, { useState } from "react";
 import {
   View,
@@ -15,14 +15,17 @@ export default function LoginScreen({ navigation }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLogin = () => {
-    if (username === "admin" && password === "admin") {
-      // Đăng nhập thành công, chuyển đến màn hình Home
+const handleLogin = async () => {
+  try {
+    const res = await authService.login(username, password);
+
+    if (res?.token) {
       navigation.replace("Main");
-    } else {
-      Alert.alert("Lỗi", "Tên đăng nhập hoặc mật khẩu không đúng!");
     }
-  };
+  } catch (err) {
+    Alert.alert("Lỗi đăng nhập", "Sai tài khoản hoặc mật khẩu!");
+  }
+};
 
   return (
     <View style={styles.container}>

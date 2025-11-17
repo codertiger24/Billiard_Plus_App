@@ -156,7 +156,7 @@ export default function TableListScreen({ navigation }) {
           >
             <Text style={[
               styles.areaText,
-              selectedArea === 1 && styles.selectedAreaText
+              selectedArea === 1 && styles.selectedAreaText 
             ]}>
               Khu vực 1
             </Text>
@@ -176,6 +176,13 @@ export default function TableListScreen({ navigation }) {
           />
         </View>
       </View>
+      <TouchableOpacity 
+  style={styles.orderButton}
+  onPress={() => navigation.navigate("OrderScreen")}
+>
+  <Text style={styles.orderButtonText}>Đi đến Order</Text>
+</TouchableOpacity>
+
     </SafeAreaView>
   );
 }

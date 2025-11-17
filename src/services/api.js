@@ -1,72 +1,65 @@
-import axios from "axios";
-import * as SecureStore from "expo-secure-store"; // an toàn hơn AsyncStorage
-import { API_URL } from "../constants/config";
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../constants/config';
 
-const instance = axios.create({
+console.log('🔌 [API] Initializing with baseURL:', API_URL);
+
+// Tạo axios instance
+const api = axios.create({
   baseURL: API_URL,
   timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Đọc token mỗi lần (hoặc cache trong biến cục bộ)
-async function getAccessToken() {
-  return await SecureStore.getItemAsync("accessToken");
-}
-async function getRefreshToken() {
-  return await SecureStore.getItemAsync("refreshToken");
-}
+// =========== REQUEST INTERCEPTOR ===========
+api.interceptors.request.use(
+  async (config) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
 
-// Gắn Authorization
-instance.interceptors.request.use(async (config) => {
-  const token = await getAccessToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// Tự refresh khi 401
-let isRefreshing = false;
-let queue = [];
-function flushQueue(err, token = null) {
-  queue.forEach(p => (err ? p.reject(err) : p.resolve(token)));
-  queue = [];
-}
-
-instance.interceptors.response.use(
-  (r) => r,
-  async (error) => {
-    const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          queue.push({ resolve, reject });
-        }).then((newToken) => {
-          original.headers.Authorization = `Bearer ${newToken}`;
-          return axios(original);
-        });
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+        console.log(`📤 [API] ${config.method.toUpperCase()} ${config.url} | Token attached`);
+      } else {
+        console.log(`⚠️ [API] No token found for ${config.url}`);
       }
-      original._retry = true;
-      isRefreshing = true;
-      try {
-        const rt = await getRefreshToken();
-        if (!rt) throw error;
-        const res = await axios.post(`${API_URL}/auth/refresh`, { refreshToken: rt });
-        const newToken = res.data?.accessToken;
-        if (newToken) {
-          await SecureStore.setItemAsync("accessToken", newToken);
-          flushQueue(null, newToken);
-          original.headers.Authorization = `Bearer ${newToken}`;
-          return axios(original);
-        }
-        throw error;
-      } catch (e) {
-        flushQueue(e, null);
-        // tuỳ ý: điều hướng về Login
-        throw e;
-      } finally {
-        isRefreshing = false;
-      }
+    } catch (e) {
+      console.log('❌ Error reading token:', e);
     }
-    throw error;
+
+    return config;
+  },
+  (error) => {
+    console.log('❌ Request Error:', error);
+    return Promise.reject(error);
   }
 );
 
-export default instance;
+// =========== RESPONSE INTERCEPTOR ===========
+api.interceptors.response.use(
+  (response) => {
+    console.log(`✅ [API] ${response.status} | ${response.config.url}`);
+    return response;
+  },
+  async (error) => {
+    const status = error.response?.status;
+
+    console.log(`❌ [API Error] ${status} | ${error.config?.url}`);
+
+    // Token hết hạn → xoá token → chuyển về Login
+    if (status === 401) {
+      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
+
+      console.log('🔒 Token expired → cleared');
+
+      // TODO: Nếu bạn dùng navigation global, sẽ redirect tại đây
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export default api;

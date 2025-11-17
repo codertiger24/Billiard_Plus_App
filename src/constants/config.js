@@ -2,8 +2,8 @@ import Constants from "expo-constants";
 
 const EXTRA = Constants.expoConfig?.extra || {};
 export const CONFIG = {
-  baseURL: EXTRA.API_BASE_URL || "http://192.168.1.7:3000", 
+  baseURL: EXTRA.API_BASE_URL || "http://192.168.1.6:3000", 
   apiPrefix: "/api/v1",
-  appName: "Billiard Plus",
+  appName: "Billiard POS",
 };
 export const API_URL = CONFIG.baseURL + CONFIG.apiPrefix;

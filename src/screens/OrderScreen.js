@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,163 +7,161 @@ import {
   ScrollView,
   StatusBar,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getMenuCategories, getMenuItems } from '../services/productService';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function OrderScreen({ navigation, route }) {
-  const [selectedCategory, setSelectedCategory] = useState('food');
-  const [cart, setCart] = useState([]);
-  
-  // Nhận thông tin bàn từ TableListScreen
-  const { tableId, tableName, isOccupied = false, timeUsed = '' } = route?.params || {};
+function getCategoryIcon(category, isActive) {
+  const color = isActive ? '#1e293b' : '#1e293b';
+  const size = 22;
 
-  // Dữ liệu mẫu
-  const menuData = {
-    food: [
-      {
-        id: 1,
-        name: 'Cơm rang dưa bò',
-        price: 35000,
-        image: 'https://giadinh.mediacdn.vn/296230595582509056/2025/6/26/com-rang-ava-17509126036582007364796.jpg',
-      },
-    ],
-    drinks: [
-      {
-        id: 1,
-        name: 'Coca Cola',
-        price: 45000,
-        image: 'https://media.istockphoto.com/id/487787108/vi/anh/lon-coca-cola-tr%C3%AAn-b%C4%83ng.jpg?s=612x612&w=0&k=20&c=P8s3xUn9gHMzS3Kllt8ETiRSIwO9W82rN-4UytO0y4I=',
-      },
-      {
-        id: 2,
-        name: 'Trà đá',
-        price: 0,
-        image: 'https://cloudcdnvod.tek4tv.vn/Mam/attach/upload/04102022104733/image_1730303171.webp',
-      },
-    ],
-    entertainment: [
-      {
-        id: 1,
-        name: 'bida',
-        price: 40000,
-        unit: '/1 giờ',
-        type: 'BI',
-      },
-      {
-        id: 2,
-        name: 'Giờ chơi thường',
-        price: 0,
-        unit: '/1 phút',
-        type: 'GI',
-      },
-    ],
-  };
+  // Tùy backend của bạn: dùng code / name / slug...
+  const code = (category.code || category.name || '').toLowerCase();
 
-  const categories = [
-    { id: 'food', name: 'Đồ ăn', icon: '🍽️' },
-    { id: 'drinks', name: 'Đồ uống', icon: '🥤' },
-    { id: 'entertainment', name: 'Giờ chơi', icon: '🎱' },
-  ];
+  if (code.includes('ăn') || code.includes('food') || code === 'do_an') {
+    // Đồ ăn
+    return <Ionicons name="fast-food-outline" size={size} color={color} />;
+  }
 
-  const addToCart = (item) => {
-    setCart([...cart, item]);
-  };
+  if (code.includes('uống') || code.includes('drink') || code === 'do_uong') {
+    // Đồ uống
+    return <Ionicons name="beer-outline" size={size} color={color} />;
+  }
 
-  const getTotalPrice = () => {
-    return cart.reduce((total, item) => total + item.price, 0);
-  };
+  if (code.includes('chơi') || code.includes('play') || code === 'gio_choi') {
+    // Giờ chơi
+    return <Ionicons name="game-controller-outline" size={size} color={color} />;
+  }
 
-  const getTotalItems = () => {
-    return cart.length;
-  };
+  // Mặc định
+  return <Ionicons name="grid-outline" size={size} color={color} />;
+}
 
-  const handleContinue = () => {
-    navigation.navigate('OrderDetail', {
-      cart: cart,
-      tableInfo: {
-        tableId,
-        tableName,
-        isOccupied,
-        timeUsed
-      }
-    });
-  };
 
-  const renderFoodItem = (item) => (
-    <View key={item.id} style={styles.itemCard}>
-      <Image source={{ uri: item.image }} style={styles.itemImage} />
+export default function OrderScreen({ navigation }) {
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [menuData, setMenuData] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+
+  // Load danh sách categories khi component mount
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  // Load menu items khi category thay đổi
+  useEffect(() => {
+    if (selectedCategory) {
+      loadMenuItems(selectedCategory);
+    }
+  }, [selectedCategory]);
+
+// Lấy categories
+const loadCategories = useCallback(async () => {
+  setLoading(true);
+  try {
+    const list = await getMenuCategories(); // luôn là mảng
+
+    console.log('[UI] Categories loaded:', list.length);
+    setCategories(list);
+
+    // Set category đầu tiên làm mặc định
+    if (list.length > 0) {
+      setSelectedCategory(list[0]._id || list[0].id);
+    }
+  } catch (error) {
+    console.error('Error loading categories:', error);
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
+// Lấy sản phẩm theo category
+const loadMenuItems = useCallback(async (categoryId) => {
+  setCategoryLoading(true);
+  try {
+    console.log("[UI] Fetching products for category:", categoryId);
+
+    const items = await getMenuItems(categoryId);   // <-- items là MẢNG
+
+    console.log("[Product] Items for category:", items.length, items);
+
+    // Lưu thẳng mảng vào menuData
+    setMenuData(prev => ({
+      ...prev,
+      [categoryId]: items
+    }));
+
+  } catch (error) {
+    console.error(`Error loading menu items for ${categoryId}:`, error);
+  } finally {
+    setCategoryLoading(false);
+  }
+}, []);
+
+
+
+
+
+  const renderProductItem = (item) => (
+    <View key={item._id || item.id} style={styles.itemCard}>
+<Image 
+  source={{ uri: item.images?.[0] || "https://via.placeholder.com/150" }}
+  style={styles.itemImage}
+/>
+
       <View style={styles.priceContainer}>
+        <Text style={styles.itemName}>{item.name}</Text>
         <Text style={styles.itemPrice}>{item.price.toLocaleString()}đ</Text>
       </View>
       <TouchableOpacity 
         style={styles.buyButton}
-        onPress={() => addToCart(item)}
+        onPress={() => console.log(`Added ${item.name} to cart`)}
       >
-        <Text style={styles.buyButtonText}>{item.name}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderDrinkItem = (item) => (
-    <View key={item.id} style={styles.itemCard}>
-      <Image source={{ uri: item.image }} style={styles.itemImage} />
-      <View style={styles.priceContainer}>
-        <Text style={styles.itemPrice}>
-          {item.price > 0 ? `${item.price.toLocaleString()}đ` : '0đ'}
-        </Text>
-      </View>
-      <TouchableOpacity 
-        style={styles.buyButton}
-        onPress={() => addToCart(item)}
-      >
-        <Text style={styles.buyButtonText}>{item.name}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderEntertainmentItem = (item) => (
-    <View key={item.id} style={styles.itemCard}>
-      <View style={styles.entertainmentImageContainer}>
-        <Text style={styles.entertainmentType}>{item.type}</Text>
-      </View>
-      <View style={styles.priceContainer}>
-        <Text style={styles.itemPrice}>
-          {item.price.toLocaleString()}đ{item.unit}
-        </Text>
-      </View>
-      <TouchableOpacity 
-        style={styles.buyButton}
-        onPress={() => addToCart(item)}
-      >
-        <Text style={styles.buyButtonText}>{item.name}</Text>
+        <Text style={styles.buyButtonText}>Thêm vào giỏ</Text>
       </TouchableOpacity>
     </View>
   );
 
   const renderCategoryContent = () => {
-    switch (selectedCategory) {
-      case 'food':
-        return (
-          <View style={styles.itemsGrid}>
-            {menuData.food.map(item => renderFoodItem(item))}
-          </View>
-        );
-      case 'drinks':
-        return (
-          <View style={styles.itemsGrid}>
-            {menuData.drinks.map(item => renderDrinkItem(item))}
-          </View>
-        );
-      case 'entertainment':
-        return (
-          <View style={styles.itemsGrid}>
-            {menuData.entertainment.map(item => renderEntertainmentItem(item))}
-          </View>
-        );
-      default:
-        return null;
+    const items = menuData[selectedCategory] ?? [];
+
+    
+    if (categoryLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      );
     }
+
+    if (!items || items.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Không có sản phẩm nào</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.itemsGrid}>
+        {items.map(item => renderProductItem(item))}
+      </View>
+    );
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -171,26 +169,43 @@ export default function OrderScreen({ navigation, route }) {
 
       <View style={styles.mainContent}>
         {/* Sidebar bên trái */}
-        <View style={styles.sidebar}>
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category.id}
-              style={[
-                styles.categoryButton,
-                selectedCategory === category.id && styles.selectedCategoryButton
-              ]}
-              onPress={() => setSelectedCategory(category.id)}
-            >
-              <Text style={styles.categoryIcon}>{category.icon}</Text>
-              <Text style={[
-                styles.categoryText,
-                selectedCategory === category.id && styles.selectedCategoryText
-              ]}>
-                {category.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+<View style={styles.sidebar}>
+  {categories.map((category) => {
+    const id = category._id || category.id;
+    const isActive = selectedCategory === id;
+
+    return (
+      <TouchableOpacity
+        key={id}
+        style={[
+          styles.categoryButton,
+          isActive && styles.selectedCategoryButton
+        ]}
+        onPress={() => setSelectedCategory(id)}
+      >
+        {/* Icon thực tế */}
+        <View style={[
+          styles.categoryIcon,
+          isActive && styles.selectedCategoryIcon
+        ]}>
+          {getCategoryIcon(category, isActive)}
         </View>
+
+        {/* Tên category */}
+        <Text
+          style={[
+            styles.categoryText,
+            isActive && styles.selectedCategoryText
+          ]}
+          numberOfLines={2}
+        >
+          {category.name}
+        </Text>
+      </TouchableOpacity>
+    );
+  })}
+</View>
+
 
         {/* Khu vực nội dung chính */}
         <View style={styles.contentArea}>
@@ -198,17 +213,6 @@ export default function OrderScreen({ navigation, route }) {
             {renderCategoryContent()}
           </ScrollView>
         </View>
-      </View>
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <View style={styles.totalInfo}>
-          <Text style={styles.totalText}>Thành tiền: {getTotalPrice().toLocaleString()}đ</Text>
-          <Text style={styles.itemCount}>Mặt hàng: {getTotalItems()}</Text>
-        </View>
-        <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-          <Text style={styles.continueButtonText}>Tiếp theo ›</Text>
-        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -219,46 +223,77 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f0f0f5',
   },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#999',
+  },
   mainContent: {
     flex: 1,
     flexDirection: 'row',
   },
   sidebar: {
-    width: 100,
-    backgroundColor: '#e8e6f0',
-    paddingVertical: 10,
-  },
-  categoryButton: {
-    paddingVertical: 15,
-    paddingHorizontal: 10,
-    marginVertical: 5,
-    marginHorizontal: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  selectedCategoryButton: {
-    backgroundColor: '#fff',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  categoryIcon: {
-    fontSize: 20,
-    marginBottom: 5,
-  },
-  categoryText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  selectedCategoryText: {
-    color: '#333',
-    fontWeight: 'bold',
-  },
+  width: 100,
+  backgroundColor: '#e8e6f0',
+  paddingVertical: 10,
+},
+
+categoryButton: {
+  paddingVertical: 15,
+  paddingHorizontal: 10,
+  marginVertical: 5,
+  borderRadius: 8,
+  alignItems: 'center',
+  backgroundColor: 'transparent',
+},
+
+selectedCategoryButton: {
+  backgroundColor: '#fff',
+  elevation: 2,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.1,
+  shadowRadius: 2,
+},
+
+// ✅ Thêm cái này để icon luôn có chỗ đứng riêng
+categoryIconWrapper: {
+  width: 28,
+  height: 28,
+  borderRadius: 14,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginBottom: 4,
+},
+
+categoryText: {
+  fontSize: 14,
+  color: '#666',
+  textAlign: 'center',
+},
+
+// ✅ Khi selected, chỉ đổi màu chữ
+selectedCategoryText: {
+  color: '#111827',
+  fontWeight: '600',
+},
+
   contentArea: {
     flex: 1,
     backgroundColor: '#f0f0f5',
@@ -276,7 +311,6 @@ const styles = StyleSheet.create({
   },
   itemCard: {
     width: '48%',
-    aspectRatio: 1, // Tạo hình vuông
     backgroundColor: '#fff',
     borderRadius: 12,
     marginBottom: 20,
@@ -289,80 +323,31 @@ const styles = StyleSheet.create({
   },
   itemImage: {
     width: '100%',
-    flex: 1, // Chiếm phần lớn không gian
+    height: 120,
     resizeMode: 'cover',
-  },
-  entertainmentImageContainer: {
-    width: '100%',
-    flex: 1, // Chiếm phần lớn không gian
-    backgroundColor: '#d0d0d0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  entertainmentType: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#666',
+    backgroundColor: '#f0f0f0',
   },
   priceContainer: {
-    backgroundColor: '#fff',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    minHeight: 30, // Đảm bảo chiều cao tối thiểu
+    padding: 10,
   },
-  itemPrice: {
-    fontSize: 12, // Giảm kích thước font
+  itemName: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-    textAlign: 'center',
-    numberOfLines: 1, // Giới hạn 1 dòng
+  },
+  itemPrice: {
+    fontSize: 14,
+    color: '#666',
   },
   buyButton: {
     backgroundColor: '#4a5568',
     paddingVertical: 8,
     alignItems: 'center',
-    minHeight: 35, // Đảm bảo chiều cao tối thiểu
+    minHeight: 35,
   },
   buyButtonText: {
     color: '#fff',
-    fontSize: 11, // Giảm kích thước font
-    fontWeight: '500',
-    textAlign: 'center',
-    numberOfLines: 1, // Giới hạn 1 dòng
-  },
-  footer: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  totalInfo: {
-    flex: 1,
-  },
-  totalText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  itemCount: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  continueButton: {
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 5,
-  },
-  continueButtonText: {
-    color: '#fff',
-    fontSize: 16,
     fontWeight: '500',
   },
 });
