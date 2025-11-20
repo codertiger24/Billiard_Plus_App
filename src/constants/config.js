@@ -2,9 +2,7 @@ import Constants from "expo-constants";
 
 const EXTRA = Constants.expoConfig?.extra || {};
 export const CONFIG = {
-
-  baseURL: EXTRA.API_BASE_URL || "http://192.168.0.100:3000", 
-
+  baseURL: EXTRA.API_BASE_URL || "http://192.168.1.8:3000", // Đã có apiPrefix ở đây
   apiPrefix: "/api/v1",
   appName: "Billiard POS",
 };
