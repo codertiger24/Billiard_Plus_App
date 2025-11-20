@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,36 +6,315 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ToastAndroid,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { sessionService } from '../services/sessionService';
+import { CONFIG } from '../constants/config';
+import { Ionicons } from '@expo/vector-icons';
+import api from '../services/api'; // Import api để fetch products
+
+// Hàm lấy URL hình ảnh sản phẩm
+const BASE_URL = CONFIG.baseURL.replace(/\/$/, '');
+
+function getProductImageUrl(product) {
+  if (!product || !product.images || !Array.isArray(product.images) || product.images.length === 0) {
+    return null;
+  }
+  
+  const imagePath = product.images[0];
+  if (!imagePath) return null;
+  
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    return imagePath;
+  } else if (imagePath.startsWith('/')) {
+    return `${BASE_URL}${imagePath}`;
+  } else {
+    return `${BASE_URL}/${imagePath}`;
+  }
+}
+
+// Custom Toast Component
+const showToast = (message, type = 'success') => {
+  if (Platform.OS === 'android') {
+    ToastAndroid.show(message, ToastAndroid.SHORT);
+  } else {
+    // Cho iOS, sử dụng Alert với timeout ngắn
+    Alert.alert('', message, [], { cancelable: true });
+    setTimeout(() => {
+      // Tự động đóng alert sau 2 giây (iOS không có API để đóng)
+    }, 2000);
+  }
+};
 
 export default function OrderDetail({ navigation, route }) {
   const [selectedTab, setSelectedTab] = useState('promotion');
   const [area, setArea] = useState('Khu vực 1 - 4');
-  const [showMenu, setShowMenu] = useState(false); // 👈 Menu state
+  const [showMenu, setShowMenu] = useState(false);
+  const [sessionData, setSessionData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [playingTime, setPlayingTime] = useState(0);
+  const [productsData, setProductsData] = useState({}); // Cache products data
+  const [saving, setSaving] = useState(false); // Thêm state cho loading save
 
-  const { cart = [], tableInfo = {} } = route?.params || {};
+  // Lấy params từ navigation
+  const { sessionId, tableName, tableId, ratePerHour } = route?.params || {};
 
-  // Dữ liệu mẫu cho order
-  const orderItems = [
-    { id: 1, name: 'Bida', price: 40000, quantity: 1, icon: '🎱' },
-    { id: 2, name: 'Tiền hàng', price: 40000, quantity: 1, icon: '🧾' },
-  ];
+  // Load session data từ API
+  const loadSessionData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await sessionService.getById(sessionId);
+      const session = response.data || response;
+      
+      console.log('📋 Session loaded, product IDs:', session.items?.map(item => ({
+        id: item.product,
+        name: item.nameSnapshot
+      })));
+      
+      setSessionData(session);
+      
+      // Tính thời gian chơi hiện tại
+      if (session.startTime) {
+        const startTime = new Date(session.startTime);
+        const currentTime = new Date();
+        const playingMinutes = Math.floor((currentTime - startTime) / (1000 * 60));
+        setPlayingTime(playingMinutes);
+      }
+    } catch (error) {
+      console.error('Error loading session data:', error);
+      Alert.alert('Lỗi', 'Không thể tải thông tin phiên chơi');
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId]);
 
-  const getTotalAmount = () => {
-    return orderItems.reduce((total, item) => total + item.price * item.quantity, 0);
+  // Function handleSave - LƯU SESSION VÀ CHUYỂN VỀ TABLE LIST (với Toast)
+  const handleSave = useCallback(async () => {
+    try {
+      console.log('💾 Saving session data...');
+      setSaving(true);
+      
+      // Lưu thông tin session (refresh data để đồng bộ)
+      await loadSessionData();
+      
+      console.log('✅ Session saved successfully');
+      
+      // Hiển thị toast thành công
+      showToast('✅ Đã lưu thông tin phiên chơi thành công');
+      
+      // Chuyển màn hình ngay lập tức
+      console.log('🔄 Navigating back to Main Tab...');
+      navigation.navigate('Main', {
+        screen: 'Table',
+        params: { refreshData: true }
+      });
+      
+    } catch (error) {
+      console.error('❌ Error saving session:', error);
+      showToast('❌ Không thể lưu thông tin. Vui lòng thử lại.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }, [loadSessionData, navigation]);
+
+  // Load session data khi component mount
+  useEffect(() => {
+    if (sessionId) {
+      loadSessionData();
+    } else {
+      setLoading(false);
+    }
+  }, [sessionId]);
+
+  // Load products data khi có session items
+  useEffect(() => {
+    if (sessionData?.items && sessionData.items.length > 0) {
+      loadProductsData();
+    }
+  }, [sessionData]);
+
+  // Tính thời gian chơi real-time
+  useEffect(() => {
+    let interval = null;
+    
+    if (sessionData && sessionData.startTime) {
+      interval = setInterval(() => {
+        const startTime = new Date(sessionData.startTime);
+        const currentTime = new Date();
+        const playingMinutes = Math.floor((currentTime - startTime) / (1000 * 60));
+        setPlayingTime(playingMinutes);
+      }, 60000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [sessionData]);
+
+  // Load products data cho các items trong session
+  const loadProductsData = useCallback(async () => {
+    try {
+      const productIds = sessionData.items
+        .map(item => item.product)
+        .filter(Boolean); // Remove null/undefined
+
+      if (productIds.length === 0) return;
+
+      console.log('🔍 Fetching products:', productIds);
+
+      // Fetch từng product - có thể optimize bằng batch API nếu backend support
+      const productPromises = productIds.map(async (productId) => {
+        try {
+          const response = await api.get(`/products/${productId}`);
+          return { id: productId, data: response.data.data || response.data };
+        } catch (error) {
+          console.error(`Error fetching product ${productId}:`, error);
+          return { id: productId, data: null };
+        }
+      });
+
+      const productResults = await Promise.all(productPromises);
+      
+      // Build products cache
+      const productsCache = {};
+      productResults.forEach(result => {
+        if (result.data) {
+          productsCache[result.id] = result.data;
+        }
+      });
+
+      console.log('✅ Products loaded:', Object.keys(productsCache));
+      setProductsData(productsCache);
+
+    } catch (error) {
+      console.error('Error loading products data:', error);
+    }
+  }, [sessionData]);
+
+  // Tính tiền giờ chơi
+  const getPlayingFee = () => {
+    const hours = Math.ceil(playingTime / 60);
+    const hourlyRate = ratePerHour || sessionData?.pricingSnapshot?.ratePerHour || 40000;
+    return hours * hourlyRate;
   };
 
-  const renderOrderItem = (item) => (
-    <View key={item.id} style={styles.orderItem}>
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemIcon}>{item.icon}</Text>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemQuantity}>{item.quantity}</Text>
+  // Tính tổng tiền F&B
+  const getFoodTotal = () => {
+    if (!sessionData?.items || sessionData.items.length === 0) {
+      return 0;
+    }
+    
+    return sessionData.items.reduce((total, item) => {
+      const price = Number(item.priceSnapshot || 0);
+      const qty = Number(item.qty || 0);
+      return total + (price * qty);
+    }, 0);
+  };
+
+  // Tính tổng tiền
+  const getTotalAmount = () => {
+    return getPlayingFee() + getFoodTotal();
+  };
+
+  // Tính tổng số lượng items
+  const getTotalQuantity = () => {
+    let total = 1; // Luôn có 1 cho tiền chơi
+    
+    if (sessionData?.items && sessionData.items.length > 0) {
+      total += sessionData.items.reduce((sum, item) => {
+        return sum + Number(item.qty || 0);
+      }, 0);
+    }
+    
+    return total;
+  };
+
+  // Render item trong order với hình ảnh
+  const renderOrderItem = (item, index) => {
+    const shouldShowImage = item.type === 'food';
+    let imageUrl = null;
+    
+    if (shouldShowImage && item.product) {
+      const product = productsData[item.productId]; // Lấy từ cache
+      imageUrl = getProductImageUrl(product);
+      console.log(`🖼️ Item ${item.name}: product found=${!!product}, imageUrl=${imageUrl}`);
+    }
+    
+    return (
+      <View key={index} style={styles.orderItem}>
+        <View style={styles.itemInfo}>
+          {shouldShowImage ? (
+            <Image 
+              source={{ 
+                uri: imageUrl || 'https://i.imgur.com/placeholder.png' // Đổi placeholder
+              }}
+              style={styles.itemImage}
+              onLoad={() => console.log(`🖼️ Image loaded: ${item.name}`)}
+              onError={(error) => console.log(`🖼️ Image error: ${item.name}`, error.nativeEvent?.error)}
+            />
+          ) : (
+            <View style={styles.iconContainer}>
+              <Ionicons name="game-controller" size={20} color="#4a5568" />
+            </View>
+          )}
+          
+          <View style={styles.itemDetails}>
+            <Text style={styles.itemName}>{item.name}</Text>
+            {item.type === 'food' && item.unit && (
+              <Text style={styles.itemUnit}>Đơn vị: {item.unit}</Text>
+            )}
+          </View>
+          
+          <Text style={styles.itemQuantity}>{item.quantity}</Text>
+        </View>
+        <Text style={styles.itemPrice}>{item.price.toLocaleString()}đ</Text>
       </View>
-      <Text style={styles.itemPrice}>{item.price.toLocaleString()}đ</Text>
-    </View>
-  );
+    );
+  };
+
+  // Tạo danh sách items để hiển thị
+  const getOrderItems = () => {
+    const items = [];
+    
+    // 1. Tiền giờ chơi
+    const playingFee = getPlayingFee();
+    const playingHours = Math.ceil(playingTime / 60);
+    
+    items.push({
+      id: 'playing_time',
+      name: `Bida (${playingHours}h${playingTime % 60 > 0 ? ` ${playingTime % 60}m` : ''})`,
+      price: playingFee,
+      quantity: 1,
+      type: 'service'
+    });
+
+    // 2. Các món F&B từ session
+    if (sessionData?.items && sessionData.items.length > 0) {
+      sessionData.items.forEach((sessionItem, index) => {
+        const product = productsData[sessionItem.product];
+        
+        const orderItem = {
+          id: `food_${index}`,
+          name: sessionItem.nameSnapshot || 'Món ăn',
+          price: Number(sessionItem.priceSnapshot || 0) * Number(sessionItem.qty || 0),
+          quantity: Number(sessionItem.qty || 0),
+          type: 'food',
+          productId: sessionItem.product, // ID để lookup trong cache
+          product: product, // Product object từ cache
+          unit: product?.unit || null
+        };
+        
+        items.push(orderItem);
+      });
+    }
+
+    return items;
+  };
 
   const renderTabContent = () => (
     <View style={styles.tabContent}>
@@ -47,6 +326,37 @@ export default function OrderDetail({ navigation, route }) {
     </View>
   );
 
+  // Loading state
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2196F3" />
+          <Text style={styles.loadingText}>Đang tải thông tin...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Nếu không có session data
+  if (!sessionData) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Không tìm thấy thông tin phiên chơi</Text>
+          <TouchableOpacity 
+            style={styles.backButtonError} 
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonErrorText}>Quay lại</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const orderItems = getOrderItems();
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -54,32 +364,42 @@ export default function OrderDetail({ navigation, route }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>←</Text>
+          <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>Tạo hoá đơn</Text>
+        <Text style={styles.headerTitle}>
+          {tableName || sessionData?.table?.name || 'Tạo hoá đơn'}
+        </Text>
 
         <TouchableOpacity onPress={() => setShowMenu(true)}>
-          <Text style={styles.menuButton}>⋮</Text>
+          <Ionicons name="ellipsis-vertical" size={24} color="#333" />
         </TouchableOpacity>
+      </View>
+
+      {/* Session Info */}
+      <View style={styles.sessionInfo}>
+        <Text style={styles.sessionText}>
+          Phiên: #{(sessionId || '').slice(-6)} • 
+          Thời gian: {Math.floor(playingTime / 60)}h{playingTime % 60}m
+        </Text>
       </View>
 
       {/* Dropdown */}
       <View style={styles.dropdownContainer}>
         <TouchableOpacity style={styles.dropdown}>
           <Text style={styles.dropdownText}>{area}</Text>
-          <Text style={styles.dropdownArrow}>▼</Text>
+          <Ionicons name="chevron-down" size={16} color="#666" />
         </TouchableOpacity>
       </View>
 
       {/* Order list */}
       <ScrollView style={styles.orderList}>
-        {orderItems.map((item) => renderOrderItem(item))}
+        {orderItems.map((item, index) => renderOrderItem(item, index))}
       </ScrollView>
 
       {/* Total Section */}
       <View style={styles.totalSection}>
-        <Text style={styles.totalLabel}>SL: 1</Text>
+        <Text style={styles.totalLabel}>SL: {getTotalQuantity()}</Text>
         <Text style={styles.totalAmount}>
           Tổng: {getTotalAmount().toLocaleString()}đ
         </Text>
@@ -125,25 +445,45 @@ export default function OrderDetail({ navigation, route }) {
 
       {/* Bottom Buttons */}
       <View style={styles.bottomButtons}>
-        <TouchableOpacity style={styles.addButton} onPress={() => {navigation.navigate('OrderScreen')}}>
+        <TouchableOpacity 
+          style={styles.addButton} 
+          onPress={() => {
+            navigation.navigate('OrderScreen', {
+              tableId: tableId,
+              tableName: tableName,
+              ratePerHour: ratePerHour,
+              sessionId: sessionId
+            });
+          }}
+        >
           <Text style={styles.addButtonText}>● Thêm</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.saveButton}>
-          <Text style={styles.saveButtonText}>Lưu</Text>
+        <TouchableOpacity 
+          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color="#666" />
+          ) : (
+            <Text style={styles.saveButtonText}>Lưu</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.payButton}
-          onPress={() => navigation.navigate('ThanhToan')}
+          onPress={() => navigation.navigate('ThanhToan', {
+            sessionId: sessionId,
+            tableName: tableName,
+            totalAmount: getTotalAmount()
+          })}
         >
           <Text style={styles.payButtonText}>Thanh toán</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ===========================
-          MENU 3 CHẤM (OVERFLOW MENU)
-          =========================== */}
+      {/* Menu overlay - unchanged */}
       {showMenu && (
         <TouchableOpacity
           activeOpacity={1}
@@ -153,7 +493,7 @@ export default function OrderDetail({ navigation, route }) {
           <View style={styles.menuBox}>
             {[
               'Yêu cầu thanh toán',
-              'Lưu & in tạm tính',
+              'Lưu & in tạm tính', 
               'Lưu & in phiếu bếp',
               'In phiếu kiểm đồ',
               'Tạo đơn mới trên bàn này',
@@ -173,11 +513,43 @@ export default function OrderDetail({ navigation, route }) {
   );
 }
 
-/* STYLE */
+// Styles với thêm style cho disabled button
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  backButtonError: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 6,
+  },
+  backButtonErrorText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   header: {
     backgroundColor: '#fff',
@@ -189,9 +561,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  backButton: { fontSize: 24, color: '#333' },
   headerTitle: { fontSize: 18, fontWeight: '600' },
-  menuButton: { fontSize: 22, fontWeight: 'bold', color: '#333' },
+
+  sessionInfo: {
+    backgroundColor: '#e3f3ff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  sessionText: {
+    fontSize: 14,
+    color: '#333',
+  },
 
   dropdownContainer: {
     backgroundColor: '#fff',
@@ -205,7 +585,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dropdownText: { flex: 1, fontSize: 14 },
-  dropdownArrow: { fontSize: 12 },
 
   orderList: {
     flex: 1,
@@ -218,17 +597,56 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomColor: '#eee',
     borderBottomWidth: 1,
+    alignItems: 'center',
   },
-  itemInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  itemIcon: { fontSize: 22, marginRight: 10 },
-  itemName: { flex: 1, fontSize: 16 },
+  itemInfo: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    flex: 1 
+  },
+  itemImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: '#f0f0f0',
+  },
+  iconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: '#f0f5f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemDetails: {
+    flex: 1,
+  },
+  itemName: { 
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  itemUnit: {
+    fontSize: 12,
+    color: '#666',
+  },
   itemQuantity: {
     backgroundColor: '#e3f3ff',
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 10,
+    fontSize: 12,
+    fontWeight: '500',
   },
-  itemPrice: { fontSize: 16, fontWeight: 'bold' },
+  itemPrice: { 
+    fontSize: 16, 
+    fontWeight: 'bold',
+    marginLeft: 10,
+    color: '#2E7D32',
+  },
 
   totalSection: {
     backgroundColor: '#e8f4ff',
@@ -289,6 +707,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 6,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
   },
   saveButtonText: { fontWeight: '600' },
 
