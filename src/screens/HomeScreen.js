@@ -1,4 +1,4 @@
-// HomeScreen.js - Fixed version with proper ID handling
+// HomeScreen.js - Chỉ hiển thị bàn đang chơi với khu vực nhúng trong card
 
 import React, { useState, useEffect } from "react";
 import {
@@ -57,9 +57,19 @@ export default function HomeScreen({ navigation }) {
   const [areas, setAreas] = useState([]);
   const [tables, setTables] = useState([]);
   const [sessions, setSessions] = useState([]);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // Real-time clock update every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, []);
 
   const loadData = async () => {
@@ -78,10 +88,10 @@ export default function HomeScreen({ navigation }) {
           return {
             ...a,
             _id: id,
-            originalId: a._id, // Keep original for debugging
+            originalId: a._id,
           };
         })
-        .filter(a => a._id && !a._id.startsWith('area-fallback')); // Remove items with fallback IDs
+        .filter(a => a._id && !a._id.startsWith('area-fallback'));
 
       console.log(`✅ Normalized ${normAreas.length} areas`);
       setAreas(normAreas);
@@ -105,7 +115,7 @@ export default function HomeScreen({ navigation }) {
             originalAreaId: t.areaId,
           };
         })
-        .filter(t => t._id && !t._id.startsWith('table-fallback')); // Remove items with fallback IDs
+        .filter(t => t._id && !t._id.startsWith('table-fallback'));
 
       console.log(`✅ Normalized ${normTables.length} tables`);
       setTables(normTables);
@@ -154,9 +164,16 @@ export default function HomeScreen({ navigation }) {
     loadData();
   };
 
-  const tablesByArea = (areaId) => {
-    if (!areaId) return [];
-    return tables.filter((t) => t.areaId === areaId);
+  const getAreaName = (areaId) => {
+    if (!areaId) return "Chưa có khu vực";
+    const area = areas.find(a => a._id === areaId);
+    return area?.name || "Chưa rõ khu vực";
+  };
+
+  const getAreaColor = (areaId) => {
+    if (!areaId) return "#999";
+    const area = areas.find(a => a._id === areaId);
+    return area?.color || "#999";
   };
 
   const calculateSessionInfo = (tableId) => {
@@ -166,7 +183,7 @@ export default function HomeScreen({ navigation }) {
     if (!session || !session.startTime) return null;
 
     const start = new Date(session.startTime);
-    const now = new Date();
+    const now = currentTime; // Use real-time clock
     const diffMs = now - start;
     const totalMinutes = Math.max(0, Math.floor(diffMs / 60000));
 
@@ -178,74 +195,74 @@ export default function HomeScreen({ navigation }) {
     const rate = table.ratePerHour || 0;
     const money = Math.ceil((totalMinutes / 60) * rate);
 
-    return { formatted, money };
+    return { formatted, money, session };
   };
 
   const formatMoney = (v) =>
     new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(v);
 
-  const renderTable = (table, index) => {
+  // Lấy danh sách bàn đang chơi
+  const getPlayingTables = () => {
+    return tables.filter(table => {
+      const hasSession = sessions.some(s => s.tableId === table._id);
+      return hasSession && table.status === "playing";
+    });
+  };
+
+  const renderPlayingTable = (table, index) => {
     if (!table || !table._id) return null;
     
-    const isPlaying = table.status === "playing";
-    const info = isPlaying ? calculateSessionInfo(table._id) : null;
+    const info = calculateSessionInfo(table._id);
+    if (!info) return null;
 
-    // Generate safe key
+    const areaName = getAreaName(table.areaId);
+    const areaColor = getAreaColor(table.areaId);
     const key = table._id || `table-${table.name}-${index}`;
 
     return (
       <TouchableOpacity
         key={key}
-        style={[styles.tableCard, isPlaying && { borderLeftColor: "#00d68f" }]}
+        style={[styles.tableCard, { borderLeftColor: areaColor }]}
         onPress={() => {
-          if (isPlaying) {
-            const s = sessions.find((x) => x.tableId === table._id);
-            if (s) {
-              navigation.navigate("OrderDetail", { session: s, table });
-            }
-          } else {
-            navigation.navigate("OrderScreen", { table });
-          }
+          navigation.navigate("OrderDetail", { 
+            session: info.session, 
+            table 
+          });
         }}
       >
+        {/* Header với khu vực */}
         <View style={styles.tableHeader}>
-          <Text style={styles.tableName}>{table.name || "Bàn"}</Text>
-
-          <View style={styles.statusBadge}>
-            <View
-              style={[
-                styles.statusDot,
-                { 
-                  backgroundColor: 
-                    table.status === "available" ? "#999" : 
-                    table.status === "playing" ? "#00d68f" : 
-                    table.status === "reserved" ? "#ff9800" : 
-                    "#e53935" 
-                },
-              ]}
-            />
-            <Text style={styles.statusText}>
-              {table.status === "available" ? "Trống" : 
-               table.status === "playing" ? "Đang chơi" : 
-               table.status === "reserved" ? "Đặt trước" : 
-               "Bảo trì"}
+          <View style={styles.tableNameSection}>
+            <Text style={styles.areaLabel} numberOfLines={1}>
+              {areaName}
             </Text>
+            <Text style={styles.tableName}>{table.name || "Bàn"}</Text>
+          </View>
+
+          <View style={[styles.statusBadge, { backgroundColor: "#e8f8f3" }]}>
+            <View style={[styles.statusDot, { backgroundColor: "#00d68f" }]} />
+            <Text style={[styles.statusText, { color: "#00d68f" }]}>Đang chơi</Text>
           </View>
         </View>
 
-        {isPlaying && info && (
-          <View style={{ marginTop: 6 }}>
-            <View style={styles.row}>
-              <Ionicons name="time-outline" size={16} color="#666" />
-              <Text style={styles.playingText}>{info.formatted}</Text>
-            </View>
-
-            <View style={styles.row}>
-              <Ionicons name="cash-outline" size={16} color="#666" />
-              <Text style={styles.playingText}>{formatMoney(info.money)}</Text>
-            </View>
+        {/* Thông tin session */}
+        <View style={styles.sessionInfo}>
+          <View style={styles.infoRow}>
+            <Ionicons name="time-outline" size={18} color="#666" />
+            <Text style={styles.infoText}>{info.formatted}</Text>
           </View>
-        )}
+
+          <View style={styles.infoRow}>
+            <Ionicons name="cash-outline" size={18} color="#666" />
+            <Text style={styles.infoText}>{formatMoney(info.money)}</Text>
+          </View>
+        </View>
+
+        {/* Footer - Tiện theo giờ */}
+        <View style={styles.footer}>
+          <Ionicons name="timer-outline" size={14} color="#999" />
+          <Text style={styles.footerText}>Tiện theo giờ</Text>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -254,38 +271,32 @@ export default function HomeScreen({ navigation }) {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#00d68f" />
-        <Text style={{ marginTop: 10 }}>Đang tải dữ liệu...</Text>
+        <Text style={{ marginTop: 10, color: "#666" }}>Đang tải dữ liệu...</Text>
       </View>
     );
   }
+
+  const playingTables = getPlayingTables();
 
   return (
     <View style={styles.container}>
       <Header onMenuPress={() => setMenuVisible(true)} />
       <Menu visible={menuVisible} onClose={() => setMenuVisible(false)} navigation={navigation} />
 
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {areas.length === 0 ? (
+      <ScrollView 
+        style={styles.scrollView}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {playingTables.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Chưa có khu vực nào</Text>
+            <Ionicons name="beer-outline" size={64} color="#ddd" />
+            <Text style={styles.emptyText}>Chưa có bàn nào đang chơi</Text>
+            <Text style={styles.emptySubText}>Nhấn nút "Tạo đơn" để bắt đầu</Text>
           </View>
         ) : (
-          areas.map((area, areaIndex) => {
-            const areaTables = tablesByArea(area._id);
-            const key = area._id || `area-${area.name}-${areaIndex}`;
-            
-            if (areaTables.length === 0) return null;
-            
-            return (
-              <View key={key} style={styles.areaSection}>
-                <Text style={[styles.areaTitle, { color: area.color || "#000" }]}>
-                  {area.name || "Khu vực"}
-                </Text>
-
-                {areaTables.map((table, tableIndex) => renderTable(table, tableIndex))}
-              </View>
-            );
-          })
+          <View style={styles.listContainer}>
+            {playingTables.map((table, index) => renderPlayingTable(table, index))}
+          </View>
         )}
       </ScrollView>
 
@@ -301,48 +312,140 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#f5f5f5" 
+  },
+  
+  center: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+
+  scrollView: {
+    flex: 1,
+  },
+
+  listContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 100,
+  },
 
   emptyContainer: { 
     flex: 1, 
     justifyContent: "center", 
     alignItems: "center", 
-    paddingVertical: 40 
+    paddingVertical: 60,
+    paddingHorizontal: 20,
   },
+  
   emptyText: { 
-    fontSize: 16, 
-    color: "#999" 
+    fontSize: 18, 
+    color: "#999",
+    fontWeight: "600",
+    marginTop: 16,
   },
 
-  areaSection: { marginBottom: 20, paddingHorizontal: 12 },
-  areaTitle: { fontSize: 22, fontWeight: "700", marginBottom: 10 },
+  emptySubText: {
+    fontSize: 14,
+    color: "#bbb",
+    marginTop: 8,
+  },
 
   tableCard: {
     backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 12,
     borderLeftWidth: 4,
-    borderLeftColor: "#999",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
 
-  tableHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  tableName: { fontSize: 18, fontWeight: "700", color: "#333" },
+  tableHeader: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+
+  tableNameSection: {
+    flex: 1,
+    marginRight: 12,
+  },
+
+  areaLabel: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  tableName: { 
+    fontSize: 20, 
+    fontWeight: "700", 
+    color: "#333" 
+  },
 
   statusBadge: { 
     flexDirection: "row", 
     alignItems: "center", 
-    backgroundColor: "#eee", 
-    paddingHorizontal: 8, 
-    paddingVertical: 4, 
-    borderRadius: 12 
+    paddingHorizontal: 10, 
+    paddingVertical: 6, 
+    borderRadius: 16,
   },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-  statusText: { fontSize: 13, color: "#444" },
+  
+  statusDot: { 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4, 
+    marginRight: 6 
+  },
+  
+  statusText: { 
+    fontSize: 13, 
+    fontWeight: "600",
+  },
 
-  row: { flexDirection: "row", alignItems: "center", marginTop: 4 },
-  playingText: { marginLeft: 6, color: "#333", fontSize: 14 },
+  sessionInfo: {
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+
+  infoRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    marginTop: 8,
+  },
+  
+  infoText: { 
+    marginLeft: 8, 
+    color: "#333", 
+    fontSize: 16,
+    fontWeight: "500",
+  },
+
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+
+  footerText: {
+    fontSize: 13,
+    color: "#999",
+    marginLeft: 6,
+  },
 
   addButton: { 
     position: "absolute", 
@@ -352,13 +455,19 @@ const styles = StyleSheet.create({
     borderRadius: 30, 
     flexDirection: "row", 
     alignItems: "center", 
-    paddingHorizontal: 18, 
-    paddingVertical: 10,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    paddingHorizontal: 20, 
+    paddingVertical: 14,
+    elevation: 6,
+    shadowColor: "#00d68f",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
-  addButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold", marginLeft: 4 },
+  
+  addButtonText: { 
+    color: "#fff", 
+    fontSize: 16, 
+    fontWeight: "700", 
+    marginLeft: 6 
+  },
 });
