@@ -12,6 +12,30 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getMenuCategories, getMenuItems } from '../services/productService';
 import { Ionicons } from '@expo/vector-icons';
+import { CONFIG } from '../constants/config';
+
+// Hàm lấy URL hình ảnh sản phẩm
+const BASE_URL = CONFIG.baseURL.replace(/\/$/, ''); // bỏ dấu / cuối nếu có
+
+function getProductImageUrl(item) {
+  const images = item.images || [];
+  const imagePath =
+    Array.isArray(images) && images.length > 0 ? images[0] : null;
+
+  if (!imagePath) return null;
+  // Nếu backend đã trả full URL rồi thì dùng luôn
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    return imagePath;
+  }
+
+  // Nếu là path kiểu "/uploads/..." thì ghép với BASE_URL
+  if (imagePath.startsWith('/')) {
+    return `${BASE_URL}${imagePath}`;
+  }
+
+  // Nếu là "uploads/..." thì thêm dấu /
+  return `${BASE_URL}/${imagePath}`;
+}
 
 function getCategoryIcon(category, isActive) {
   const color = isActive ? '#1e293b' : '#1e293b';
@@ -106,18 +130,29 @@ const loadMenuItems = useCallback(async (categoryId) => {
 
 
 
-  const renderProductItem = (item) => (
+  const renderProductItem = (item) => {
+  console.log('ITEM >>>', JSON.stringify(item, null, 2));
+  console.log('IMAGES FIELD >>>', item.images);
+
+  const imageUrl = getProductImageUrl(item);
+
+  return (
     <View key={item._id || item.id} style={styles.itemCard}>
-<Image 
-  source={{ uri: item.images?.[0] || "https://via.placeholder.com/150" }}
-  style={styles.itemImage}
-/>
+      <Image
+        source={{
+          uri:
+            imageUrl ||
+            'https://via.placeholder.com/300x200.png?text=No+Image',
+        }}
+        style={styles.itemImage}
+      />
 
       <View style={styles.priceContainer}>
         <Text style={styles.itemName}>{item.name}</Text>
         <Text style={styles.itemPrice}>{item.price.toLocaleString()}đ</Text>
       </View>
-      <TouchableOpacity 
+
+      <TouchableOpacity
         style={styles.buyButton}
         onPress={() => console.log(`Added ${item.name} to cart`)}
       >
@@ -125,6 +160,9 @@ const loadMenuItems = useCallback(async (categoryId) => {
       </TouchableOpacity>
     </View>
   );
+};
+
+
 
   const renderCategoryContent = () => {
     const items = menuData[selectedCategory] ?? [];
