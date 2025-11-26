@@ -261,7 +261,7 @@ export default function HomeScreen({ navigation }) {
         {/* Footer - Tiện theo giờ */}
         <View style={styles.footer}>
           <Ionicons name="timer-outline" size={14} color="#999" />
-          <Text style={styles.footerText}>Tiện theo giờ</Text>
+          <Text style={styles.footerText}>Tiền theo giờ</Text>
         </View>
       </TouchableOpacity>
     );
