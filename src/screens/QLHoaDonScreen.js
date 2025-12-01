@@ -15,6 +15,7 @@ const QLHoaDonScreen = ({ navigation }) => {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
+  const [activeTab, setActiveTab] = useState("all"); // 🔥 TAB FILTER
 
   useEffect(() => {
     loadBills();
@@ -23,7 +24,6 @@ const QLHoaDonScreen = ({ navigation }) => {
   const loadBills = async () => {
     try {
       const data = await getBills();
-
       console.log("📌 API trả về:", data);
 
       if (Array.isArray(data)) {
@@ -101,13 +101,18 @@ const QLHoaDonScreen = ({ navigation }) => {
     );
   }
 
+  /* 🔥 FILTER BILL THEO SEARCH + THEO TAB */
   const filteredBills = bills.filter((bill) => {
     const text = searchText.trim().toLowerCase();
-    const tableName =
-      bill.table?.name ||
-      bill.tableName ||
-      "";
-    return tableName.toLowerCase().includes(text);
+    const tableName = (bill.table?.name || bill.tableName || "").toLowerCase();
+
+    const matchSearch = tableName.includes(text);
+
+    let matchTab = true;
+    if (activeTab === "paid") matchTab = bill.paid === true;
+    if (activeTab === "unpaid") matchTab = bill.paid === false;
+
+    return matchSearch && matchTab;
   });
 
   return (
@@ -125,7 +130,7 @@ const QLHoaDonScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* SEARCH */}
+      {/* SEARCH BOX */}
       <View style={styles.searchBox}>
         <Ionicons name="search-outline" size={20} color="#999" style={{ marginRight: 8 }} />
         <TextInput
@@ -136,6 +141,34 @@ const QLHoaDonScreen = ({ navigation }) => {
         />
       </View>
 
+      {/* 🔥 TAB FILTER */}
+      <View style={styles.tabContainer}>
+        {[
+          { label: "Tất cả", value: "all" },
+          { label: "Đã thanh toán", value: "paid" },
+          { label: "Chưa thanh toán", value: "unpaid" },
+        ].map((t) => (
+          <TouchableOpacity
+            key={t.value}
+            onPress={() => setActiveTab(t.value)}
+            style={[
+              styles.tab,
+              activeTab === t.value && styles.activeTab
+            ]}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === t.value && styles.activeTabText
+              ]}
+            >
+              {t.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* LIST */}
       {filteredBills.length === 0 ? (
         <View style={styles.emptyBox}>
           <Text>Không có hóa đơn nào.</Text>
@@ -147,8 +180,8 @@ const QLHoaDonScreen = ({ navigation }) => {
           renderItem={renderItem}
           contentContainerStyle={{
             paddingVertical: 16,
-            paddingHorizontal: 12, // 🔥 tránh tràn 2 bên
-            paddingBottom: 80,     // 🔥 tránh bị che
+            paddingHorizontal: 12,
+            paddingBottom: 80,
           }}
         />
       )}
@@ -179,6 +212,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  /* SEARCH */
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -197,28 +231,46 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  loadingBox: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  /* TABS */
+  tabContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 6,
   },
 
-  emptyBox: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  tab: {
+    backgroundColor: "#e5e5e5",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    marginRight: 8,
   },
 
+  activeTab: {
+    backgroundColor: "#007AFF",
+  },
+
+  tabText: {
+    color: "#333",
+    fontSize: 14,
+  },
+
+  activeTabText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+
+  /* LIST CARD */
   card: {
     padding: 16,
     marginBottom: 12,
     backgroundColor: "#fff",
     borderRadius: 10,
     elevation: 3,
-
-    width: "100%",          // 🔥 không bị tràn
-    alignSelf: "center",    // 🔥 canh giữa
-    overflow: "hidden",     // 🔥 không lòi góc
+    width: "100%",
+    alignSelf: "center",
+    overflow: "hidden",
   },
 
   title: {
@@ -258,5 +310,17 @@ const styles = StyleSheet.create({
     color: "#d9534f",
     fontWeight: "bold",
     marginTop: 8,
+  },
+
+  loadingBox: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  emptyBox: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
