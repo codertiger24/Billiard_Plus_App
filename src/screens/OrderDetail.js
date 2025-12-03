@@ -11,11 +11,13 @@ import {
   Image,
   ToastAndroid,
   Platform,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { sessionService } from '../services/sessionService';
-import { tableService } from '../services/tableService'; // Add import
-import { listAreas } from '../services/areaService'; // Add import
+import { tableService } from '../services/tableService';
+import { listAreas } from '../services/areaService';
 import { CONFIG } from '../constants/config';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api'; // Import api để fetch products
@@ -63,8 +65,21 @@ export default function OrderDetail({ navigation, route }) {
   const [productsData, setProductsData] = useState({}); // Cache products data
   const [saving, setSaving] = useState(false); // Thêm state cho loading save
 
+  // Thêm states cho dialog hủy đơn
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [otherReason, setOtherReason] = useState('');
+
   // Lấy params từ navigation
   const { sessionId, tableName, tableId, ratePerHour } = route?.params || {};
+
+  // Danh sách lý do hủy đơn
+  const cancelReasons = [
+    'Đổi trả lại',
+    'Thêm nhầm đơn hàng',
+    'Khách báo hủy',
+    'Lý do khác'
+  ];
 
   // Load area information for the table
   const loadAreaInfo = useCallback(async () => {
@@ -162,7 +177,7 @@ export default function OrderDetail({ navigation, route }) {
   const handlePayment = useCallback(async () => {
     try {
       console.log('💳 Navigating to payment screen...');
-      
+
       // Chuyển sang màn thanh toán với thông tin session
       navigation.navigate('ThanhToan', {
         sessionId: sessionId,
@@ -173,7 +188,7 @@ export default function OrderDetail({ navigation, route }) {
         ratePerHour: ratePerHour || sessionData?.pricingSnapshot?.ratePerHour || 40000,
         sessionData: sessionData
       });
-      
+
     } catch (error) {
       console.error('❌ Error navigating to payment:', error);
       showToast('❌ Không thể chuyển đến màn thanh toán', 'error');
@@ -183,12 +198,14 @@ export default function OrderDetail({ navigation, route }) {
   // Function handleMenuAction - XỬ LÝ CÁC ACTION TRONG MENU
   const handleMenuAction = useCallback(async (action) => {
     setShowMenu(false); // Đóng menu trước
-    
+
     switch (action) {
       case 'Yêu cầu thanh toán':
         await handleCheckoutPayment();
         break;
-      // Có thể thêm các case khác sau
+      case 'Hủy đơn':
+        setShowCancelDialog(true);
+        break;
       default:
         showToast('Chức năng đang phát triển', 'info');
         break;
@@ -199,15 +216,15 @@ export default function OrderDetail({ navigation, route }) {
   const handleCheckoutPayment = useCallback(async () => {
     try {
       console.log('💳 Creating bill via checkout API...');
-      
+
       if (!sessionId) {
         showToast('❌ Không tìm thấy thông tin phiên chơi', 'error');
         return;
       }
-      
+
       // Hiển thị loading
       setSaving(true);
-      
+
       // Gọi API checkout để tạo bill và đóng session
       const checkoutResponse = await sessionService.checkout(sessionId, {
         endAt: new Date(),
@@ -215,20 +232,20 @@ export default function OrderDetail({ navigation, route }) {
         paid: false, // Chưa thanh toán, chỉ tạo bill
         note: 'Yêu cầu thanh toán từ menu'
       });
-      
+
       console.log('✅ Bill created via checkout:', checkoutResponse);
-      
+
       showToast('✅ Tạo hóa đơn thành công');
-      
+
       // Chuyển tới Main tab với Payment screen
       navigation.navigate('Main', {
         screen: 'Payment',
         params: { refreshData: true }
       });
-      
+
     } catch (error) {
       console.error('❌ Error creating bill via checkout:', error);
-      
+
       let errorMessage = 'Không thể tạo hóa đơn';
       if (error.response?.status === 400) {
         errorMessage = 'Phiên chơi không hợp lệ';
@@ -237,7 +254,7 @@ export default function OrderDetail({ navigation, route }) {
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       }
-      
+
       showToast(`❌ ${errorMessage}`, 'error');
     } finally {
       setSaving(false);
@@ -491,6 +508,133 @@ export default function OrderDetail({ navigation, route }) {
     );
   }
 
+  // Hàm xử lý hủy đơn
+  const handleCancelOrder = async () => {
+    if (!cancelReason) {
+      showToast('Vui lòng chọn lý do hủy đơn', 'error');
+      return;
+    }
+
+    if (cancelReason === 'Lý do khác' && !otherReason.trim()) {
+      showToast('Vui lòng nhập lý do hủy đơn', 'error');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const reason = cancelReason === 'Lý do khác' ? otherReason.trim() : cancelReason;
+
+      console.log('🗑️ Canceling session:', sessionId, 'with reason:', reason);
+
+      // Gọi API hủy phiên session
+      await sessionService.void(sessionId, reason);
+
+      console.log('✅ Session voided successfully');
+
+      // Đóng dialog và reset state
+      setShowCancelDialog(false);
+      setCancelReason('');
+      setOtherReason('');
+
+      // Hiển thị thông báo thành công
+      showToast('✅ Đã hủy đơn thành công');
+
+      // Chuyển về màn hình danh sách bàn
+      navigation.navigate('Main', {
+        screen: 'Table',
+        params: { refreshData: true }
+      });
+
+    } catch (error) {
+      console.error('❌ Error canceling session:', error);
+
+      let errorMessage = 'Không thể hủy đơn';
+      if (error.response?.status === 400) {
+        errorMessage = 'Phiên chơi không hợp lệ để hủy';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'Bạn không có quyền hủy đơn';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Không tìm thấy phiên chơi';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+
+      showToast(`❌ ${errorMessage}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Component dialog hủy đơn
+  const CancelOrderDialog = () => (
+    <Modal
+      visible={showCancelDialog}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowCancelDialog(false)}
+    >
+      <View style={styles.dialogOverlay}>
+        <View style={styles.dialogContainer}>
+          <Text style={styles.dialogTitle}>Hủy đơn hàng</Text>
+
+          <View style={styles.reasonsList}>
+            {cancelReasons.map((reason, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.reasonItem}
+                onPress={() => setCancelReason(reason)}
+              >
+                <View style={[
+                  styles.radioButton,
+                  cancelReason === reason && styles.radioButtonSelected
+                ]}>
+                  {cancelReason === reason && (
+                    <View style={styles.radioButtonInner} />
+                  )}
+                </View>
+                <Text style={styles.reasonText}>{reason}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {cancelReason === 'Lý do khác' && (
+            <View style={styles.otherReasonContainer}>
+              <TextInput
+                style={styles.otherReasonInput}
+                placeholder="Nhập lý do hủy đơn..."
+                value={otherReason}
+                onChangeText={setOtherReason}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+          )}
+
+          <View style={styles.dialogButtons}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                setShowCancelDialog(false);
+                setCancelReason('');
+                setOtherReason('');
+              }}
+            >
+              <Text style={styles.cancelButtonText}>Hủy</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.confirmButton}
+              onPress={handleCancelOrder}
+            >
+              <Text style={styles.confirmButtonText}>Xác nhận</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const orderItems = getOrderItems();
 
   return (
@@ -626,8 +770,8 @@ export default function OrderDetail({ navigation, route }) {
               'Thay đổi bàn',
               'Khách hàng',
             ].map((item, index) => (
-              <TouchableOpacity 
-                key={index} 
+              <TouchableOpacity
+                key={index}
                 style={styles.menuItem}
                 onPress={() => handleMenuAction(item)}
                 disabled={saving}
@@ -638,11 +782,14 @@ export default function OrderDetail({ navigation, route }) {
           </View>
         </TouchableOpacity>
       )}
+
+      {/* Dialog hủy đơn */}
+      <CancelOrderDialog />
     </SafeAreaView>
   );
 }
 
-// Styles với thêm style cho disabled button
+// Styles với thêm styles cho dialog
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -870,4 +1017,102 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
   },
   menuText: { fontSize: 16, color: '#222' },
+
+  // Dialog styles
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  dialogContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+  },
+  dialogTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+
+  reasonsList: {
+    marginBottom: 15,
+  },
+  reasonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  radioButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  radioButtonSelected: {
+    borderColor: '#007AFF',
+  },
+  radioButtonInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#007AFF',
+  },
+  reasonText: {
+    fontSize: 16,
+    color: '#111827',
+    flex: 1,
+  },
+
+  otherReasonContainer: {
+    marginBottom: 20,
+  },
+  otherReasonInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#111827',
+    minHeight: 80,
+  },
+
+  dialogButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
 });
