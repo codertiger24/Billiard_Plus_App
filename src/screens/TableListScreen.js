@@ -115,16 +115,17 @@ export default function TableListScreen({ navigation }) {
   }, [loadTables, loadSessions]);
 
   const updateRealTimeData = useCallback(() => {
-    if (sessions.length === 0) return;
-    
+    // ✅ SỬA: Không return early nếu sessions = 0, có thể tables vẫn cần update
     const newRealTimeData = {};
     
     tables.forEach(table => {
       if (table.status === 'playing') {
-        const session = sessions.find(s => 
-          String(s.table) === String(table._id || table.id) ||
-          (s.status === 'open')
-        );
+        // ✅ SỬA: Tìm session chính xác cho table này
+        const session = sessions.find(s => {
+          const sessionTableId = String(s.table?._id || s.table?.id || s.table);
+          const tableId = String(table._id || table.id);
+          return sessionTableId === tableId && s.status === 'open';
+        });
         
         if (session?.startTime) {
           const now = new Date();
@@ -138,7 +139,8 @@ export default function TableListScreen({ navigation }) {
               ? `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}` 
               : `${minutes}m`;
               
-            newRealTimeData[table._id || table.id] = timeString;
+            const tableId = table._id || table.id;
+            newRealTimeData[tableId] = timeString;
           }
         }
       }
@@ -158,20 +160,43 @@ export default function TableListScreen({ navigation }) {
     return () => clearInterval(dataInterval);
   }, [loadData, loadTables, loadSessions]);
 
+  // ✅ THÊM: useEffect để handle navigation focus và refresh data
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      const state = navigation.getState();
+      const params = state.routes[state.index]?.params;
+      
+      if (params?.refreshData) {
+        console.log('🔄 Refresh data requested from navigation');
+        // Reset params để tránh reload liên tục
+        navigation.setParams({ refreshData: undefined });
+        
+        // Reload data khi có refreshData param
+        onRefresh();
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, onRefresh]);
+
+  // ✅ SỬA: Effect để update real-time data, loại bỏ dependency vòng lặp
+  useEffect(() => {
+    if (tables.length > 0) {
+      updateRealTimeData();
+    }
+  }, [tables, sessions]); // ✅ Loại bỏ updateRealTimeData khỏi dependency
+
+  // ✅ SỬA: Timer effect với dependency đơn giản hơn
   useEffect(() => {
     const timeInterval = setInterval(() => {
       setCurrentTime(new Date());
-      updateRealTimeData();
+      if (tables.length > 0) {
+        updateRealTimeData();
+      }
     }, 1000);
 
     return () => clearInterval(timeInterval);
-  }, [updateRealTimeData]);
-
-  useEffect(() => {
-    if (tables.length > 0 && sessions.length > 0) {
-      updateRealTimeData();
-    }
-  }, [tables, sessions, updateRealTimeData]);
+  }, [tables.length]); // ✅ Chỉ dependency là tables.length
 
   const getStatusText = useCallback((table) => {
     switch (table.status) {

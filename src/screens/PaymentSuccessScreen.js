@@ -6,8 +6,34 @@ import { Ionicons } from "@expo/vector-icons";
 const currency = (n=0)=> (Number(n)||0).toLocaleString("vi-VN",{style:"currency",currency:"VND",maximumFractionDigits:0});
 
 export default function PaymentSuccessScreen({ route, navigation }) {
-  const { area = "khu vực 1 - 10", need = 0, paid = 0, change = 0 } = route.params || {};
+  const { 
+    area = "khu vực 1 - 10", 
+    need = 0, 
+    paid = 0, 
+    change = 0,
+    shouldRefreshTables = false 
+  } = route.params || {};
   const [eInvoice, setEInvoice] = useState(false);
+
+  // ✅ THÊM: Logic xử lý navigation với refresh
+  const handleComplete = () => {
+    if (shouldRefreshTables) {
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'Main',
+            params: {
+              screen: 'Table',
+              params: { refreshData: true }
+            }
+          }
+        ]
+      });
+    } else {
+      navigation.popToTop();
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -40,7 +66,7 @@ export default function PaymentSuccessScreen({ route, navigation }) {
         </View>
 
         <View style={{ flex: 1 }} />
-        <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.popToTop()}>
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleComplete}>
           <Text style={styles.primaryText}>Hoàn tất thanh toán</Text>
         </TouchableOpacity>
       </View>

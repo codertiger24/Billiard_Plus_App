@@ -115,7 +115,7 @@ export default function ThanhToanScreen({ navigation, route }) {
         return;
       }
 
-      // Chuẩn bị params cho success screen
+      // ✅ THÊM: Chuẩn bị params cho success screen với refreshData
       const successParams = {
         sessionId: sessionId || 'completed',
         billId: finalBillId,
@@ -124,7 +124,9 @@ export default function ThanhToanScreen({ navigation, route }) {
         need: actualTotalAmount,
         paid: paidAmount,
         change: Math.max(paidAmount - actualTotalAmount, 0),
-        billCode: finalBillCode
+        billCode: finalBillCode,
+        // ✅ THÊM: Flag để báo success screen cần refresh table data
+        shouldRefreshTables: true
       };
 
       // Chuyển tới màn thành công
