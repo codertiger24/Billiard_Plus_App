@@ -205,3 +205,4 @@ const styles = StyleSheet.create({
   footer: { marginTop: 50, alignItems: "center" },
   footerText: { fontSize: 12, color: "#999" },
 });
+
