@@ -9,7 +9,7 @@ const currency = (n=0)=> (Number(n)||0).toLocaleString("vi-VN",{style:"currency"
 
 export default function PaymentSuccessScreen({ route, navigation }) {
   const { 
-    //  area = "khu vực 1 - 10",  // ⚠️ TODO: Đang bị comment - cần uncomment khi có data
+    //  area = "khu vực 1 - 10",  
     need = 0, 
     paid = 0, 
     change = 0,
@@ -17,7 +17,6 @@ export default function PaymentSuccessScreen({ route, navigation }) {
   } = route.params || {};
   const [eInvoice, setEInvoice] = useState(false);
 
-  // Animation values - CHỈ cho phần thông báo
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const checkmarkAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;

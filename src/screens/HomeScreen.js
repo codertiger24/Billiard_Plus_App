@@ -1,4 +1,3 @@
-// HomeScreen.js - Chỉ hiển thị bàn đang chơi với khu vực nhúng trong card
 
 import React, { useState, useEffect } from "react";
 import {
