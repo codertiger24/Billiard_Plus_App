@@ -14,15 +14,16 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Alert } from "react-native";
 
 
 
 const BASE_DURATION = 220;
 
 const defaultMenuItems = [
-  { id: "management", title: "Quản lý câu lạc bộ", icon: "people", route: "Management" },
+  { id: "management", title: "Quản lý quán", icon: "people", route: "Management", disabled: true },
   { id: "bills", title: "Quản lý hóa đơn", icon: "receipt", route: "Bills" },
-  { id: "settings", title: "Thiết lập", icon: "settings", route: "Settings" },
+  { id: "settings", title: "Thiết lập", icon: "settings", route: "Settings", disabled: true },
   { id: "logout", title: "Đăng xuất", icon: "log-out", route: "Logout" },
 ];
 
@@ -98,7 +99,17 @@ export default function Menu({
       handleClose();
       return;
     }
+// Chức năng đang phát triển
+  if (item.disabled || !item.route) {
+    Alert.alert(
+      "Thông báo",
+      "Chức năng đang được phát triển, vui lòng quay lại sau."
+    );
+    handleClose();
+    return;
+  }
 
+  // Điều hướng bình thường
     navigation.navigate(item.route);
     handleClose();
   };
@@ -133,23 +144,41 @@ export default function Menu({
     );
   };
 
-  const renderItem = ({ item }) => (
+  const renderItem = ({ item }) => {
+  const disabled = item.disabled;
+
+  return (
     <Pressable
-      onPress={() => onItemPress(item)}
-      android_ripple={{ color: "rgba(0,0,0,0.06)" }}
-      style={({ pressed }) => [
+      onPress={() => !disabled && onItemPress(item)}
+      android_ripple={
+        disabled ? null : { color: "rgba(0,0,0,0.06)" }
+      }
+      style={[
         styles.menuItem,
-        pressed && styles.menuItemPressed,
-        { transform: [{ scale: pressed ? 0.985 : 1 }] },
+        disabled && { opacity: 0.45 },
       ]}
     >
       <View style={styles.iconWrapper}>
-        <Ionicons name={item.icon} size={20} color="#2f3b4a" />
+        <Ionicons
+          name={item.icon}
+          size={20}
+          color={disabled ? "#9ca3af" : "#2f3b4a"}
+        />
       </View>
+
       <Text style={styles.menuItemText}>{item.title}</Text>
-      <Ionicons name="chevron-forward" size={18} color="#9aa6b2" />
+
+      {!disabled && (
+        <Ionicons
+          name="chevron-forward"
+          size={18}
+          color="#9aa6b2"
+        />
+      )}
     </Pressable>
   );
+};
+
 
   return (
     <Modal

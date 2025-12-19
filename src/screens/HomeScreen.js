@@ -255,9 +255,14 @@ export default function HomeScreen({ navigation }) {
         }
       >
         {playingTables.length === 0 ? (
-          <View style={styles.center}>
-            <Ionicons name="beer-outline" size={64} color="#ddd" />
-            <Text>Chưa có bàn đang chơi</Text>
+          <View style={styles.emptyContainer}>
+            <Ionicons name="grid-outline" size={72} color="#cbd5e1" />
+             <Text style={styles.emptyTitle}>
+      Chưa có bàn đang chơi
+    </Text>
+    <Text style={styles.emptySubtitle}>
+      Hiện tại chưa có bàn nào được mở
+    </Text>
           </View>
         ) : (
           <View style={styles.listContainer}>
@@ -329,4 +334,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  emptyContainer: {
+  flex: 1,
+  minHeight: 700, // đảm bảo đủ cao khi ScrollView
+  justifyContent: "center",
+  alignItems: "center",
+  paddingVertical: 40,
+},
+
+emptyTitle: {
+  marginTop: 16,
+  fontSize: 18,
+  fontWeight: "600",
+  color: "#334155",
+},
+
+emptySubtitle: {
+  marginTop: 6,
+  fontSize: 16,
+  color: "#94a3b8",
+},
+
 });
