@@ -88,6 +88,49 @@ export default function ThanhToanScreen({ navigation, route }) {
       let finalBillCode;
       const methodKey = getPaymentMethodKey(paidBy);
 
+      if (methodKey === 'transfer') {
+        // Chuyển khoản: không đánh dấu paid tại đây, dẫn sang màn QR / poll
+        if (isExistingBill && billId) {
+          // Ensure the bill has paymentMethod set to transfer (not paid)
+          try {
+            await api.patch(`/bills/${billId}`, { paymentMethod: methodKey });
+          } catch (err) {
+            // Not fatal; continue
+            console.warn('Failed to set bill paymentMethod to transfer', err);
+          }
+
+          finalBillId = billId;
+          finalBillCode = billCode || billId;
+
+        } else if (sessionId) {
+          // Create bill from session but keep paid = false so external payment can confirm
+          const checkoutResponse = await sessionService.checkout(sessionId, {
+            endAt: new Date(),
+            paymentMethod: methodKey,
+            paid: false,
+            note: 'Thanh toán chuyển khoản - chờ xác nhận'
+          });
+
+          const createdBill = checkoutResponse.data || checkoutResponse;
+          finalBillId = createdBill._id || createdBill.id;
+          finalBillCode = createdBill.code || finalBillId;
+
+        } else {
+          Alert.alert('Lỗi', 'Không có thông tin hóa đơn để thanh toán');
+          return;
+        }
+
+        // Navigate to QR / transfer payment screen
+        navigation.replace('ThanhToanBank', {
+          billId: finalBillId,
+          billCode: finalBillCode,
+          tableName: actualTableName,
+          need: actualTotalAmount,
+        });
+
+        return;
+      }
+
       if (isExistingBill && billId) {
         // Case 1: Thanh toán bill có sẵn từ PaymentScreen
         await api.patch(`/bills/${billId}/pay`, {
@@ -262,7 +305,12 @@ export default function ThanhToanScreen({ navigation, route }) {
         {/* Thông tin hoá đơn */}
         <Section title="Thông tin hoá đơn" icon={<FontAwesome5 name="receipt" size={16} color="#111827" />}>
           <Row left="Dùng tại bàn" right={actualTableName} />
-          <Row left={isExistingBill ? "Mã hóa đơn" : "Mã phiên"} right={actualBillCode || "Đang tạo..."} />
+
+          {/* Chỉ hiển thị mã hóa đơn khi là hóa đơn đã tồn tại */}
+          {isExistingBill && (
+            <Row left="Mã hóa đơn" right={actualBillCode || "Đang tạo..."} />
+          )}
+
           <Row left="Thời gian tạo" right={formatTime()} />
           <Row left="Trạng thái" right={isExistingBill ? "Chờ thanh toán" : "Đang tạo hóa đơn"} />
         </Section>

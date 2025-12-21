@@ -9,6 +9,7 @@ import OrderDetail from "../screens/OrderDetail";
 import ChooseTableScreen from "../screens/ChooseTableScreen";
 import LoginScreen from "../screens/LoginScreen";
 import ThanhToanScreen from "../screens/ThanhToanScreen";
+import ThanhToanBankScreen from "../screens/ThanhToanBankScreen";
 import PaymentSuccessScreen from "../screens/PaymentSuccessScreen";
 import QLHoaDonScreen from "../screens/QLHoaDonScreen";
 import InvoiceDetailScreen from "../screens/InvoiceDetailScreens";
@@ -47,6 +48,7 @@ export default function AppNavigator() {
         <Stack.Screen name="OrderDetail" component={OrderDetail} />
         <Stack.Screen name="ChooseTableScreen" component={ChooseTableScreen} />
         <Stack.Screen name="ThanhToan" component={ThanhToanScreen} />
+        <Stack.Screen name="ThanhToanBank" component={ThanhToanBankScreen} />
         <Stack.Screen name="ThanhToanSuccess" component={PaymentSuccessScreen} />
         <Stack.Screen name="Restaurant" component={RestaurantScreen} />
         <Stack.Screen name="Bills" component={BillsScreen} />
