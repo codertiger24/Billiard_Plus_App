@@ -16,7 +16,7 @@ import { getMenuCategories, getMenuItems } from '../services/productService';
 import { sessionService } from '../services/sessionService';
 import { Ionicons } from '@expo/vector-icons';
 import { CONFIG } from '../constants/config';
-
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 // Hàm lấy URL hình ảnh sản phẩm
 const BASE_URL = CONFIG.baseURL.replace(/\/$/, ''); // bỏ dấu / cuối nếu có
 
@@ -58,7 +58,13 @@ function getCategoryIcon(category, isActive) {
     return <Ionicons name="game-controller-outline" size={size} color={color} />;
   }
 
-  return <Ionicons name="grid-outline" size={size} color={color} />;
+  return (
+  <MaterialCommunityIcons
+    name="billiards"
+    size={size}
+    color={color}
+  />
+);
 }
 
 // Thêm hàm showToast giống OrderDetail
