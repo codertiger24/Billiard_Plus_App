@@ -33,6 +33,9 @@ export default function ThanhToanScreen({ navigation, route }) {
     tableName, 
     tableId,
     totalAmount, 
+    originalAmount, // ✅ THÊM: Tổng tiền gốc
+    discount, // ✅ THÊM: Số tiền giảm giá
+    appliedPromotions, // ✅ THÊM: Danh sách promotion đã áp dụng
     playingTime, 
     ratePerHour, 
     sessionData,
@@ -48,10 +51,12 @@ export default function ThanhToanScreen({ navigation, route }) {
     paymentMethod
   } = route?.params || {};
 
-  // Sử dụng thông tin phù hợp
-  const actualTotalAmount = totalAmount || 0;
+  // ✅ SỬA: Thêm validation và default values an toàn
+  const actualTotalAmount = Number(totalAmount) || 0;
+  const actualOriginalAmount = Number(originalAmount) || 0;
+  const actualDiscount = Number(discount) || 0;
   const actualTableName = tableName || "Không xác định";
-  const actualBillCode = billCode || billId || sessionId;
+  const actualBillCode = billCode || billId || sessionId || "N/A";
 
   // Chuyển đổi label sang key cho API
   const getPaymentMethodKey = (label) => {
@@ -62,30 +67,31 @@ export default function ThanhToanScreen({ navigation, route }) {
   // Kiểm tra xem có phải phương thức tiền mặt không
   const isCashPayment = paidBy === "Tiền mặt";
 
-  // Xử lý thanh toán
+  // ✅ SỬA: Logic xử lý thanh toán với validation
   const handlePayment = async () => {
     try {
       setProcessing(true);
       
       // Kiểm tra thông tin cần thiết
-      if (!actualTotalAmount) {
-        Alert.alert('Lỗi', 'Không tìm thấy thông tin số tiền thanh toán');
+      if (!actualTotalAmount || actualTotalAmount <= 0) {
+        Alert.alert('Lỗi', 'Không tìm thấy thông tin số tiền thanh toán hợp lệ');
+
         return;
       }
-
-      let paidAmount = actualTotalAmount; // Mặc định bằng tổng hóa đơn
-
-      // Chỉ kiểm tra tiền khách trả nếu là thanh toán tiền mặt
+  
+      let paidAmount = actualTotalAmount;
+  
       if (isCashPayment) {
-        paidAmount = Number(customerCash || 0);
+        paidAmount = Number(customerCash) || 0;
         if (paidAmount < actualTotalAmount) {
           Alert.alert('Lỗi', `Số tiền khách trả không đủ. Cần: ${currency(actualTotalAmount)}`);
           return;
         }
       }
-
+  
       let finalBillId;
       let finalBillCode;
+      let finalBillData = null;
       const methodKey = getPaymentMethodKey(paidBy);
 
       if (methodKey === 'transfer') {
@@ -131,8 +137,9 @@ export default function ThanhToanScreen({ navigation, route }) {
         return;
       }
 
+
       if (isExistingBill && billId) {
-        // Case 1: Thanh toán bill có sẵn từ PaymentScreen
+        // Case 1: Thanh toán bill có sẵn
         await api.patch(`/bills/${billId}/pay`, {
           paymentMethod: methodKey
         });
@@ -140,41 +147,94 @@ export default function ThanhToanScreen({ navigation, route }) {
         finalBillId = billId;
         finalBillCode = billCode || billId;
         
+        // Load lại bill data sau khi thanh toán
+        const billResponse = await api.get(`/bills/${billId}`);
+        finalBillData = billResponse.data?.data || billResponse.data;
+        
       } else if (sessionId) {
-        // Case 2: Tạo bill mới từ session (OrderDetail)
+        // Case 2: Tạo bill mới từ session
         const checkoutResponse = await sessionService.checkout(sessionId, {
           endAt: new Date(),
           paymentMethod: methodKey,
           paid: true,
           note: 'Thanh toán trực tiếp'
         });
-
+  
         const createdBill = checkoutResponse.data || checkoutResponse;
         finalBillId = createdBill._id || createdBill.id;
         finalBillCode = createdBill.code || finalBillId;
+        finalBillData = createdBill;
         
       } else {
         Alert.alert('Lỗi', 'Không có thông tin hóa đơn để thanh toán');
         return;
       }
-
-      // ✅ THÊM: Chuẩn bị params cho success screen với refreshData
+  
+      // ✅ FIX: Extract items một cách an toàn
+      let extractedItems = [];
+      
+      // Thử lấy từ finalBillData trước
+      if (finalBillData?.items && Array.isArray(finalBillData.items)) {
+        extractedItems = finalBillData.items;
+      }
+      // Fallback sang billData từ params
+      else if (billData?.items && Array.isArray(billData.items)) {
+        extractedItems = billData.items;
+      }
+      // Fallback sang sessionData
+      else if (sessionData?.items && Array.isArray(sessionData.items)) {
+        extractedItems = sessionData.items;
+      }
+  
+      console.log('📦 Extracted items for invoice:', extractedItems.length, extractedItems);
+  
+      // ✅ Chuẩn bị đầy đủ params cho success screen
       const successParams = {
-        sessionId: sessionId || 'completed',
-        billId: finalBillId,
-        tableName: actualTableName,
-        area: "Khu vực 1",
+        // Thông tin thanh toán
         need: actualTotalAmount,
         paid: paidAmount,
         change: Math.max(paidAmount - actualTotalAmount, 0),
+        
+        // Thông tin bàn & session
+        tableName: actualTableName,
+        sessionId: sessionId,
+        tableId: tableId,
+        billId: finalBillId,
         billCode: finalBillCode,
-        // ✅ THÊM: Flag để báo success screen cần refresh table data
+        
+        // ⭐ CRITICAL: Truyền đầy đủ dữ liệu
+        billData: finalBillData,
+        sessionData: sessionData,
+        items: extractedItems, // ✅ Items đã được extract
+        
+        // Thời gian
+        startTime: finalBillData?.startTime || sessionData?.startTime,
+        endTime: finalBillData?.endTime || new Date().toISOString(),
+        playingTime: playingTime,
+        
+        // Tổng tiền chi tiết
+        playAmount: finalBillData?.playAmount || playAmount || 0,
+        serviceAmount: finalBillData?.serviceAmount || serviceAmount || 0,
+        subTotal: finalBillData?.subTotal || subTotal || actualTotalAmount,
+        
+        // Phương thức thanh toán
+        paymentMethod: paidBy,
+        
+        // Rate
+        ratePerHour: ratePerHour || 40000,
+        
+        // Flags
         shouldRefreshTables: true
       };
-
+  
+      console.log('✅ Navigating to success with params:', {
+        ...successParams,
+        itemsCount: successParams.items.length
+      });
+  
       // Chuyển tới màn thành công
       navigation.replace("ThanhToanSuccess", successParams);
-
+  
     } catch (error) {
       console.error('❌ Payment error:', error);
       let errorMessage = 'Không thể xử lý thanh toán';
@@ -192,11 +252,11 @@ export default function ThanhToanScreen({ navigation, route }) {
     }
   };
 
-  // Tính toán các giá trị
+  // ✅ SỬA: Tính toán các giá trị với validation
   const subtotal = actualTotalAmount;
   const needToPay = subtotal;
   const change = useMemo(
-    () => isCashPayment ? Math.max(Number(customerCash || 0) - needToPay, 0) : 0,
+    () => isCashPayment ? Math.max((Number(customerCash) || 0) - needToPay, 0) : 0,
     [customerCash, needToPay, isCashPayment]
   );
 
@@ -267,15 +327,15 @@ export default function ThanhToanScreen({ navigation, route }) {
     </Modal>
   );
 
-  // Validation - chỉ kiểm tra totalAmount
-  if (!actualTotalAmount) {
+  // ✅ SỬA: Validation - kiểm tra chặt chẽ hơn
+  if (!actualTotalAmount || actualTotalAmount <= 0) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
         <View style={styles.errorContainer}>
           <FontAwesome5 name="exclamation-triangle" size={48} color="#f59e0b" />
           <Text style={styles.errorText}>
-            Thông tin thanh toán không đầy đủ.{'\n'}
+            Thông tin thanh toán không hợp lệ.{'\n'}
             Vui lòng quay lại và thử lại.
           </Text>
           <TouchableOpacity 
@@ -305,26 +365,23 @@ export default function ThanhToanScreen({ navigation, route }) {
         {/* Thông tin hoá đơn */}
         <Section title="Thông tin hoá đơn" icon={<FontAwesome5 name="receipt" size={16} color="#111827" />}>
           <Row left="Dùng tại bàn" right={actualTableName} />
-
-          {/* Chỉ hiển thị mã hóa đơn khi là hóa đơn đã tồn tại */}
-          {isExistingBill && (
-            <Row left="Mã hóa đơn" right={actualBillCode || "Đang tạo..."} />
-          )}
-
+          <Row left={isExistingBill ? "Mã hóa đơn" : "Mã phiên"} right={actualBillCode} />
           <Row left="Thời gian tạo" right={formatTime()} />
           <Row left="Trạng thái" right={isExistingBill ? "Chờ thanh toán" : "Đang tạo hóa đơn"} />
         </Section>
 
-        {/* Thông tin khách hàng */}
-        <Section title="Thông tin khách hàng" icon={<Ionicons name="person-circle" size={18} color="#111827" />}>
-          <TouchableOpacity style={styles.inputLike}>
-            <Text style={styles.muted}>Khách lẻ</Text>
-            <Ionicons name="search" size={18} color="#3b82f6" />
-          </TouchableOpacity>
-        </Section>
-
-        {/* Thông tin thanh toán */}
+        {/* ✅ SỬA: Thông tin thanh toán với validation chặt chẽ */}
         <Section title="Thông tin thanh toán" icon={<Ionicons name="cash-outline" size={18} color="#111827" />}>
+          {/* Hiển thị tổng tiền gốc nếu có khuyến mãi */}
+          {actualDiscount > 0 && actualOriginalAmount > 0 && (
+            <Row left="Tổng tiền gốc" right={currency(actualOriginalAmount)} />
+          )}
+          
+          {/* Hiển thị khuyến mãi đã áp dụng */}
+          {actualDiscount > 0 && (
+            <Row left="Khuyến mãi" right={`-${currency(actualDiscount)}`} />
+          )}
+          
           <Row left={`Tổng hóa đơn`} right={currency(subtotal)} />
 
           {/* Cần thanh toán */}

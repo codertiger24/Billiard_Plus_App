@@ -131,12 +131,32 @@ export default function OrderDetail({ navigation, route }) {
             billRule: promo.conditions?.billRules?.[0],
             stackable: promo.stackable,
             applyOrder: promo.applyOrder,
-            applicable: applicable
+            applicable: applicable,
+            // Thêm createdAt để sắp xếp
+            createdAt: promo.createdAt || promo.created_at
           };
         })
       );
 
-      setAvailablePromotions(transformedPromotions);
+      // Sắp xếp promotions: applicable lên đầu, sau đó sắp xếp theo createdAt
+      const sortedPromotions = transformedPromotions.sort((a, b) => {
+        // 1. Ưu tiên applicable lên đầu
+        if (a.applicable && !b.applicable) return -1;
+        if (!a.applicable && b.applicable) return 1;
+        
+        // 2. Nếu cùng trạng thái applicable, sắp xếp theo thời gian tạo (mới nhất lên đầu)
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateB - dateA; // Sort descending (newest first)
+      });
+
+      console.log('🔄 Promotions sorted:', sortedPromotions.map(p => ({ 
+        code: p.code, 
+        applicable: p.applicable, 
+        createdAt: p.createdAt 
+      })));
+
+      setAvailablePromotions(sortedPromotions);
 
     } catch (error) {
       console.error('❌ Error loading promotions:', error);
@@ -426,42 +446,82 @@ export default function OrderDetail({ navigation, route }) {
 
   // Xử lý khi nhấn vào promotion
   const handlePromotionPress = useCallback((promotion) => {
+    console.log('🎯 [Promotion Press] Starting promotion press:', promotion.code);
+    console.log('🎯 [Promotion Press] Current applied promotions:', appliedPromotions.map(p => ({ code: p.code, stackable: p.stackable })));
+    
     const isApplied = appliedPromotions.some(p => p.id === promotion.id);
+    console.log('🎯 [Promotion Press] Is already applied?', isApplied);
     
     if (isApplied) {
       // Bỏ áp dụng promotion hiện tại
+      console.log('🎯 [Promotion Press] Removing promotion:', promotion.code);
       setAppliedPromotions(prev => prev.filter(p => p.id !== promotion.id));
       showToast(`Đã bỏ khuyến mãi ${promotion.code}`);
-    } else if (promotion.applicable) {
-      // Kiểm tra stackable
-      if (!promotion.stackable && appliedPromotions.length > 0) {
-        // THAY ĐỔI: Thay thế promotion thay vì hiển thị lỗi
-        setAppliedPromotions([promotion]); // Thay thế tất cả bằng promotion mới
-        showToast(`Đã áp dụng khuyến mãi ${promotion.code}`);
-        return;
-      }
-
-      // Kiểm tra conflict với promotions đã áp dụng
-      const conflictPromotions = appliedPromotions.filter(applied => 
-        !applied.stackable || applied.applyTo === promotion.applyTo
-      );
-
-      if (conflictPromotions.length > 0) {
-        // THAY ĐỔI: Thay thế promotion conflict thay vì hiển thị lỗi
-        const remainingPromotions = appliedPromotions.filter(applied => 
-          applied.stackable && applied.applyTo !== promotion.applyTo
-        );
-        setAppliedPromotions([...remainingPromotions, promotion]);
-        showToast(`Đã thay thế bằng khuyến mãi ${promotion.code}`);
-        return;
-      }
-
-      // Áp dụng promotion bình thường (stackable)
-      setAppliedPromotions(prev => [...prev, promotion]);
-      showToast(`Đã áp dụng khuyến mãi ${promotion.code}`);
-    } else {
-      showToast('Khuyến mãi này chưa đủ điều kiện áp dụng', 'error');
+      return;
     }
+    
+    if (!promotion.applicable) {
+      console.log('🎯 [Promotion Press] Promotion not applicable:', promotion.code);
+      showToast('Khuyến mãi này chưa đủ điều kiện áp dụng', 'error');
+      return;
+    }
+
+    console.log('🎯 [Promotion Press] Promotion stackable?', promotion.stackable);
+
+    // Nếu promotion mới KHÔNG stackable
+    if (!promotion.stackable) {
+      console.log('🎯 [Promotion Press] Non-stackable promotion - replacing all');
+      setAppliedPromotions([promotion]);
+      showToast(`Đã áp dụng khuyến mãi ${promotion.code}`);
+      return;
+    }
+
+    // Nếu promotion mới CÓ THỂ stack
+    console.log('🎯 [Promotion Press] Stackable promotion - checking existing promotions');
+    
+    // Kiểm tra xem có promotion nào KHÔNG stackable không
+    const hasNonStackablePromotion = appliedPromotions.some(applied => !applied.stackable);
+    console.log('🎯 [Promotion Press] Has non-stackable promotion?', hasNonStackablePromotion);
+    
+    if (hasNonStackablePromotion) {
+      console.log('🎯 [Promotion Press] Has non-stackable - replacing all with new stackable');
+      setAppliedPromotions([promotion]);
+      showToast(`Đã thay thế và áp dụng khuyến mãi ${promotion.code}`);
+      return;
+    }
+
+    // Tất cả promotions hiện tại đều stackable
+    console.log('🎯 [Promotion Press] All current promotions are stackable');
+    
+    // Kiểm tra conflict về applyTo (chỉ khi cả hai đều có applyTo)
+    const applyTo = promotion.discount?.applyTo;
+    console.log('🎯 [Promotion Press] New promotion applyTo:', applyTo);
+    
+    if (applyTo) {
+      const conflictPromotions = appliedPromotions.filter(applied => 
+        applied.discount?.applyTo === applyTo
+      );
+      console.log('🎯 [Promotion Press] Conflict promotions:', conflictPromotions.map(p => p.code));
+      
+      if (conflictPromotions.length > 0) {
+        console.log('🎯 [Promotion Press] Has applyTo conflict - replacing same type');
+        const nonConflictPromotions = appliedPromotions.filter(applied => 
+          applied.discount?.applyTo !== applyTo
+        );
+        const newPromotions = [...nonConflictPromotions, promotion];
+        console.log('🎯 [Promotion Press] Setting promotions after conflict resolution:', newPromotions.map(p => p.code));
+        setAppliedPromotions(newPromotions);
+        showToast(`Đã thay thế khuyến mãi cùng loại bằng ${promotion.code}`);
+        return;
+      }
+    }
+
+    // Không có conflict → thêm vào danh sách
+    console.log('🎯 [Promotion Press] No conflict - adding to list');
+    const newPromotions = [...appliedPromotions, promotion];
+    console.log('🎯 [Promotion Press] Final promotions list:', newPromotions.map(p => p.code));
+    setAppliedPromotions(newPromotions);
+    showToast(`Đã áp dụng khuyến mãi ${promotion.code}`);
   }, [appliedPromotions]);
 
   // Render promotion item trong horizontal scroll
@@ -675,7 +735,10 @@ export default function OrderDetail({ navigation, route }) {
         sessionId: sessionId,
         tableName: tableName,
         tableId: tableId,
-        totalAmount: getTotalAmount(),
+        totalAmount: getTotalAmountWithPromotions(), // ✅ SỬA: Dùng tổng tiền đã áp dụng promotion
+        originalAmount: getTotalAmount(), // ✅ THÊM: Tổng tiền gốc để tham khảo
+        discount: getTotalDiscount(), // ✅ THÊM: Số tiền giảm giá
+        appliedPromotions: appliedPromotions, // ✅ THÊM: Danh sách promotion đã áp dụng
         playingTime: playingTime,
         ratePerHour: ratePerHour || sessionData?.pricingSnapshot?.ratePerHour || 40000,
         sessionData: sessionData
@@ -685,7 +748,7 @@ export default function OrderDetail({ navigation, route }) {
       console.error('❌ Error navigating to payment:', error);
       showToast('❌ Không thể chuyển đến màn thanh toán', 'error');
     }
-  }, [sessionId, tableName, tableId, getTotalAmount, playingTime, ratePerHour, sessionData, navigation]);
+  }, [sessionId, tableName, tableId, getTotalAmountWithPromotions, getTotalAmount, getTotalDiscount, appliedPromotions, playingTime, ratePerHour, sessionData, navigation]);
 
   // Function handleMenuAction - XỬ LÝ CÁC ACTION TRONG MENU
   const handleMenuAction = useCallback(async (action) => {
@@ -1596,7 +1659,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // CENTER SECTION (30%)
+  // CENTER SECTION: Quantity Controls
   centerSection: {
     flex: 0.3,
     alignItems: 'center',
