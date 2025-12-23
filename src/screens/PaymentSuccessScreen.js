@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Animated, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Linking, StatusBar, Animated, BackHandler, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
@@ -81,7 +81,28 @@ export default function PaymentSuccessScreen({ route, navigation }) {
       })
     ]).start();
   }, []);
+  // Block hardware back button on Android: navigate to TableListScreen (Main->Table)
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const onBackPress = () => {
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'Main',
+            params: {
+              screen: 'Table',
+              params: { refreshData: true }
+            }
+          }
+        ]
+      });
+      return true; // indicate we've handled the back press
+    };
 
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, [navigation]);
   // Transaction ID và thời gian
   const transactionId = billCode || Math.random().toString(36).substr(2, 9).toUpperCase();
   const currentTime = new Date();
