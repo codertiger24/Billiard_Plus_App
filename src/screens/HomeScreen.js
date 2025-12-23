@@ -23,17 +23,36 @@ import { listAreas } from "../services/areaService";
 /* ===================== HELPER ===================== */
 const getId = (val) => {
   if (val === null || val === undefined) return undefined;
-  if (typeof val === "string" && val.trim() !== "") return val.trim();
-  if (typeof val === "number") return String(val);
-
-  if (typeof val === "object") {
-    if (val.$oid) return val.$oid;
-    if (val._id?.$oid) return val._id.$oid;
-    if (typeof val._id === "string") return val._id;
+  
+  // Nếu là string hợp lệ
+  if (typeof val === "string" && val.trim() !== "") {
+    return val.trim();
+  }
+  
+  // Nếu là number
+  if (typeof val === "number") {
+    return String(val);
   }
 
-  const str = String(val);
-  return str !== "undefined" && str !== "null" && str !== "" ? str : undefined;
+  // Nếu là object
+  if (typeof val === "object") {
+    // MongoDB ObjectId format
+    if (val.$oid) return val.$oid;
+    
+    // Nested _id
+    if (val._id) {
+      if (typeof val._id === "object" && val._id.$oid) return val._id.$oid;
+      if (typeof val._id === "string" && val._id.trim()) return val._id.trim();
+    }
+    
+    // Trường hợp có field id
+    if (val.id) {
+      if (typeof val.id === "object" && val.id.$oid) return val.id.$oid;
+      if (typeof val.id === "string" && val.id.trim()) return val.id.trim();
+    }
+  }
+
+  return undefined;
 };
 
 /* ===================== SCREEN ===================== */
@@ -85,34 +104,64 @@ export default function HomeScreen({ navigation }) {
 
       // ---------- AREAS ----------
       const areaRes = await listAreas();
-      const rawAreas = areaRes.data?.data || areaRes.data || areaRes;
+    const rawAreas = areaRes.data?.data || areaRes.data || areaRes;
 
-      const normAreas = (Array.isArray(rawAreas) ? rawAreas : [])
-        .map((a, i) => ({
-          ...a,
-          _id: getId(a._id) || `area-${i}`,
-        }))
-        .filter((a) => a._id);
+    const normAreas = (Array.isArray(rawAreas) ? rawAreas : [])
+      .map((a, i) => ({
+        ...a,
+        _id: getId(a._id) || getId(a.id) || `area-${i}`, // ⚠️ Thêm xử lý a.id
+      }))
+      .filter((a) => a._id);
 
-      setAreas(normAreas);
-
+    console.log("✅ Areas loaded:", normAreas.map(a => ({ id: a._id, name: a.name })));
+    setAreas(normAreas);
       // ---------- TABLES ----------
       const tableRes = await tableService.list();
-      const rawTables =
-        tableRes.data?.items ||
-        tableRes.data?.data ||
-        tableRes.data ||
-        tableRes;
+    const rawTables =
+      tableRes.data?.items ||
+      tableRes.data?.data ||
+      tableRes.data ||
+      tableRes;
 
-      const normTables = (Array.isArray(rawTables) ? rawTables : [])
-        .map((t, i) => ({
+    const normTables = (Array.isArray(rawTables) ? rawTables : [])
+      .map((t, i) => {
+        // ✅ Xử lý areaId từ nhiều nguồn
+        let areaId = undefined;
+        
+        // Trường hợp 1: areaId là object {_id: "..."}
+        if (t.areaId && typeof t.areaId === 'object') {
+          areaId = getId(t.areaId._id) || getId(t.areaId.id) || getId(t.areaId);
+        }
+        // Trường hợp 2: areaId là string
+        else if (t.areaId) {
+          areaId = getId(t.areaId);
+        }
+        // Trường hợp 3: area là object {_id: "..."}
+        else if (t.area && typeof t.area === 'object') {
+          areaId = getId(t.area._id) || getId(t.area.id) || getId(t.area);
+        }
+        // Trường hợp 4: area là string
+        else if (t.area) {
+          areaId = getId(t.area);
+        }
+
+        return {
           ...t,
-          _id: getId(t._id) || `table-${i}`,
-          areaId: getId(t.areaId) || getId(t.area),
-        }))
-        .filter((t) => t._id);
+          _id: getId(t._id) || getId(t.id) || `table-${i}`,
+          areaId: areaId, // ✅ Đã normalize
+        };
+      })
+      .filter((t) => t._id);
 
-      setTables(normTables);
+    console.log("✅ Tables sample:", normTables.slice(0, 3).map(t => ({ 
+      id: t._id, 
+      name: t.name, 
+      areaId: t.areaId,
+      status: t.status 
+    })));
+
+    setTables(normTables);
+
 
       // ---------- SESSIONS ----------
       const sessionRes = await sessionService.list();
@@ -121,22 +170,44 @@ export default function HomeScreen({ navigation }) {
         sessionRes.data?.data ||
         sessionRes.data ||
         sessionRes;
-
+  
       const normSessions = (Array.isArray(rawSessions) ? rawSessions : []).map(
-        (s, i) => ({
-          ...s,
-          _id: getId(s._id) || `session-${i}`,
-          tableId: getId(s.tableId) || getId(s.table),
-        })
+        (s, i) => {
+          // ✅ Xử lý tableId từ nhiều nguồn
+          let tableId = undefined;
+          
+          if (s.tableId && typeof s.tableId === 'object') {
+            tableId = getId(s.tableId._id) || getId(s.tableId.id) || getId(s.tableId);
+          } else if (s.tableId) {
+            tableId = getId(s.tableId);
+          } else if (s.table && typeof s.table === 'object') {
+            tableId = getId(s.table._id) || getId(s.table.id) || getId(s.table);
+          } else if (s.table) {
+            tableId = getId(s.table);
+          }
+  
+          return {
+            ...s,
+            _id: getId(s._id) || getId(s.id) || `session-${i}`,
+            tableId: tableId,
+          };
+        }
       );
-
+  
       const playing = normSessions.filter(
         (s) => (!s.endTime || s.status === "playing") && s.tableId
       );
-
+  
+      console.log("✅ Playing sessions:", playing.length);
+      console.log("✅ Session details:", playing.map(s => ({ 
+        id: s._id, 
+        tableId: s.tableId,
+        status: s.status 
+      })));
+      
       setSessions(playing);
     } catch (err) {
-      console.log("❌ Load error:", err);
+      console.error("❌ Load error:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);

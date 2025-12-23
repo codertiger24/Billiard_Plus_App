@@ -5,12 +5,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 
 const currency = (n=0)=> (Number(n)||0).toLocaleString("vi-VN",{style:"currency",currency:"VND",maximumFractionDigits:0});
+//Tong tien thơi gian choi
+const shortPlayMoney = (n = 0) =>
+  Math.round(n / 1000).toLocaleString("vi-VN");
+
 
 // Thông tin cửa hàng
 const STORE_INFO = {
   name: "Billiard Plus",
   phone: "0967771234",
-  address: "Cầu Diên, Nam Từ Liêm, Hà Nội"
+  address: "Số 5, Cầu Diễn, Nam Từ Liêm, Hà Nội"
 };
 
 export default function PaymentSuccessScreen({ route, navigation }) {
@@ -470,9 +474,10 @@ const getInvoiceItems = () => {
         <div style="border-top: 1px solid #e5e7eb; margin: 12px 0; padding-top: 8px;">
           ${playAmount > 0 ? `
           <div class="total-row">
-            <span style="font-weight: 600;">Tổng tiền giờ chơi:</span>
-            <span style="font-weight: 700;">${playAmount.toLocaleString()}đ</span>
+            <span>Tổng tiền giờ chơi:</span>
+            <span>${shortPlayMoney(playAmount)}</span>
           </div>
+
           ` : ''}
           
           ${serviceAmount > 0 ? `
