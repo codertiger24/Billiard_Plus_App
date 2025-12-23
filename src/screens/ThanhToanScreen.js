@@ -86,12 +86,12 @@ export default function ThanhToanScreen({ navigation, route }) {
       // Kiểm tra thông tin cần thiết
       if (!actualTotalAmount || actualTotalAmount <= 0) {
         Alert.alert('Lỗi', 'Không tìm thấy thông tin số tiền thanh toán hợp lệ');
+
         return;
       }
-
-      let paidAmount = actualTotalAmount; // Mặc định bằng tổng hóa đơn
-
-      // Chỉ kiểm tra tiền khách trả nếu là thanh toán tiền mặt
+  
+      let paidAmount = actualTotalAmount;
+  
       if (isCashPayment) {
         paidAmount = Number(customerCash) || 0;
         if (paidAmount < actualTotalAmount) {
@@ -99,9 +99,10 @@ export default function ThanhToanScreen({ navigation, route }) {
           return;
         }
       }
-
+  
       let finalBillId;
       let finalBillCode;
+      let finalBillData = null;
       const methodKey = getPaymentMethodKey(paidBy);
 
       console.log('💳 [ThanhToan] Payment method:', methodKey);
@@ -151,6 +152,7 @@ export default function ThanhToanScreen({ navigation, route }) {
         return;
       }
 
+
       if (isExistingBill && billId) {
         console.log('💳 [ThanhToan] Paying existing bill:', billId);
         
@@ -161,6 +163,10 @@ export default function ThanhToanScreen({ navigation, route }) {
         
         finalBillId = billId;
         finalBillCode = billCode || billId;
+        
+        // Load lại bill data sau khi thanh toán
+        const billResponse = await api.get(`/bills/${billId}`);
+        finalBillData = billResponse.data?.data || billResponse.data;
         
       } else if (sessionId) {
         console.log('💳 [ThanhToan] Creating bill from session:', sessionId);
@@ -212,6 +218,7 @@ export default function ThanhToanScreen({ navigation, route }) {
         const createdBill = checkoutResponse.data?.bill || checkoutResponse.data || checkoutResponse;
         finalBillId = createdBill._id || createdBill.id;
         finalBillCode = createdBill.code || finalBillId;
+        finalBillData = createdBill;
         
         // Kiểm tra bill total
         const createdBillTotal = createdBill.total;
