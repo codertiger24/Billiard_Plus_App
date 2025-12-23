@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Animated, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Linking, StatusBar, Animated, BackHandler, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
@@ -26,13 +26,17 @@ export default function PaymentSuccessScreen({ route, navigation }) {
     startTime,
     endTime,
     playingTime = 0,
-    playAmount = 0,
-    serviceAmount = 0,
+    playAmount: playAmountParam = 0,
+    serviceAmount: serviceAmountParam = 0,
     subTotal = 0,
     billCode,
     paymentMethod = "Tiền mặt",
     ratePerHour = 40000
   } = route.params || {};
+  
+  // ✅ Ưu tiên lấy từ billData nếu có
+  const playAmount = billData?.bill?.playAmount || playAmountParam;
+  const serviceAmount = billData?.bill?.serviceAmount || serviceAmountParam;
   
   const [eInvoice, setEInvoice] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -81,7 +85,28 @@ export default function PaymentSuccessScreen({ route, navigation }) {
       })
     ]).start();
   }, []);
+  // Block hardware back button on Android: navigate to TableListScreen (Main->Table)
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const onBackPress = () => {
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'Main',
+            params: {
+              screen: 'Table',
+              params: { refreshData: true }
+            }
+          }
+        ]
+      });
+      return true; // indicate we've handled the back press
+    };
 
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, [navigation]);
   // Transaction ID và thời gian
   const transactionId = billCode || Math.random().toString(36).substr(2, 9).toUpperCase();
   const currentTime = new Date();
@@ -410,6 +435,10 @@ const getInvoiceItems = () => {
         <span class="info-label">Giờ kết thúc:</span>
         <span class="info-value">${invoiceDate}</span>
       </div>
+      <div class="info-row">
+        <span class="info-label">Thời gian sử dụng:</span>
+        <span class="info-value">${playingTime} phút</span>
+      </div>
     
       <div class="thick-divider"></div>
     
@@ -436,19 +465,23 @@ const getInvoiceItems = () => {
     
       <!-- Total Section -->
       <div class="total-section">
-        ${playAmount > 0 ? `
-        <div class="total-row">
-          <span>Tiền giờ chơi (${playingTime} phút):</span>
-          <span style="font-weight: 600;">${playAmount.toLocaleString()}đ</span>
-        </div>
-        ` : ''}
+       
         
-        ${serviceAmount > 0 ? `
-        <div class="total-row">
-          <span>Tiền dịch vụ:</span>
-          <span style="font-weight: 600;">${serviceAmount.toLocaleString()}đ</span>
+        <div style="border-top: 1px solid #e5e7eb; margin: 12px 0; padding-top: 8px;">
+          ${playAmount > 0 ? `
+          <div class="total-row">
+            <span style="font-weight: 600;">Tổng tiền giờ chơi:</span>
+            <span style="font-weight: 700;">${playAmount.toLocaleString()}đ</span>
+          </div>
+          ` : ''}
+          
+          ${serviceAmount > 0 ? `
+          <div class="total-row">
+            <span style="font-weight: 600;">Tổng tiền dịch vụ:</span>
+            <span style="font-weight: 700;">${serviceAmount.toLocaleString()}đ</span>
+          </div>
+          ` : ''}
         </div>
-        ` : ''}
         
         <div class="total-row highlight">
           <span class="total-label">Thanh toán:</span>
